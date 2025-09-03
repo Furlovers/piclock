@@ -2,8 +2,8 @@ import RPi.GPIO as GPIO
 import threading
 import time
 
-BUZZER_PIN = 24  # PWM
-GND_PIN = 16     # ligado ao GND do buzzer
+BUZZER_PIN = 18  # PWM
+GND_PIN = 34     # ligado ao GND do buzzer
 
 class AudioPlayer:
     def __init__(self):
