@@ -1,0 +1,15 @@
+# Interface gráfica
+tk
+
+# Controle de áudio
+pygame
+
+# GPIO para botões físicos
+RPi.GPIO
+
+# Comunicação com I²C (RTC DS3231, etc.)
+smbus2
+
+# Manipulação de datas/horários
+python-dateutil
+

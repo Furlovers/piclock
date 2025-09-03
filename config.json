@@ -1,0 +1,11 @@
+{
+  "alarms": [],
+  "snooze_minutes": 10,
+  "brightness": 180,
+  "auto_dim": {
+    "enabled": false,
+    "night": 40,
+    "start": "22:30",
+    "end": "06:30"
+  }
+}
