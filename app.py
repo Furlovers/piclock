@@ -12,9 +12,7 @@ from brightness import Backlight
 from rtc_sync import RTC
 from gpio_buttons import GpioButtons
 
-
 CONFIG_FILE = "config.json"
-
 
 class AlarmClockApp:
     def __init__(self, root):
@@ -41,6 +39,32 @@ class AlarmClockApp:
         )
         self.status_label.pack(side="bottom", fill="x")
 
+        # Frame para botões de controle na tela
+        self.button_frame = tk.Frame(root, bg="black")
+        self.button_frame.pack(side="bottom", fill="x", pady=10)
+
+        # Botão para disparar alarme manualmente
+        self.test_alarm_btn = tk.Button(
+            self.button_frame,
+            text="Disparar Alarme",
+            font=("Helvetica", 18),
+            bg="red",
+            fg="white",
+            command=self.test_alarm
+        )
+        self.test_alarm_btn.pack(side="left", padx=20)
+
+        # Botão para parar alarme
+        self.stop_alarm_btn = tk.Button(
+            self.button_frame,
+            text="Parar Alarme",
+            font=("Helvetica", 18),
+            bg="gray",
+            fg="white",
+            command=self.stop_alarm
+        )
+        self.stop_alarm_btn.pack(side="left", padx=20)
+
         # Thread de checagem de alarmes
         self.running = True
         self.alarm_thread = threading.Thread(target=self.check_alarms, daemon=True)
@@ -49,23 +73,28 @@ class AlarmClockApp:
         self.update_clock()
 
     def load_config(self):
-        if not Path(CONFIG_FILE).exists():
+        try:
+            if not Path(CONFIG_FILE).exists():
+                raise FileNotFoundError
+
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+
+        except (FileNotFoundError, json.JSONDecodeError):
             # cria config padrão
-            default_cfg = {
+            cfg = {
                 "alarms": [],
                 "snooze_minutes": 10,
                 "brightness": 180,
                 "auto_dim": {"enabled": False, "night": 40, "start": "22:30", "end": "06:30"},
             }
             with open(CONFIG_FILE, "w") as f:
-                json.dump(default_cfg, f, indent=2)
+                json.dump(cfg, f, indent=2)
 
-        with open(CONFIG_FILE) as f:
-            cfg = json.load(f)
-            self.alarms = cfg.get("alarms", [])
-            self.snooze_minutes = cfg.get("snooze_minutes", 10)
-            self.brightness = cfg.get("brightness", 180)
-            self.auto_dim = cfg.get("auto_dim", {})
+        self.alarms = cfg.get("alarms", [])
+        self.snooze_minutes = cfg.get("snooze_minutes", 10)
+        self.brightness = cfg.get("brightness", 180)
+        self.auto_dim = cfg.get("auto_dim", {})
 
         Backlight.set(self.brightness)
 
@@ -92,7 +121,6 @@ class AlarmClockApp:
                     continue
 
                 if now.strftime("%H:%M") == alarm["time"]:
-                    # Checa se o dia da semana bate
                     weekday = now.weekday()  # 0 = seg
                     if weekday in alarm.get("days", []):
                         self.trigger_alarm(alarm)
@@ -120,13 +148,30 @@ class AlarmClockApp:
     def _snooze_wait(self):
         time.sleep(self.snooze_minutes * 60)
         self.status_label.config(text="Soneca terminou")
-        # Reproduz de novo o último alarme
         if self.alarms:
             self.trigger_alarm(self.alarms[0])
 
     def stop_alarm(self):
         self.audio.stop()
         self.status_label.config(text="Alarme parado")
+
+    def test_alarm(self):
+        """
+        Dispara um alarme de teste manualmente.
+        """
+        if self.alarms:
+            # Usa o primeiro alarme cadastrado
+            self.trigger_alarm(self.alarms[0])
+        else:
+            # Se não houver alarmes cadastrados, cria um temporário
+            test_alarm = {
+                "time": datetime.now().strftime("%H:%M"),
+                "days": [0,1,2,3,4,5,6],
+                "label": "Alarme Manual",
+                "sound": "assets/alarm.mp3",
+                "volume": 70
+            }
+            self.trigger_alarm(test_alarm)
 
     def on_close(self):
         self.running = False
