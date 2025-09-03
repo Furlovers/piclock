@@ -1,11 +1,10 @@
 import tkinter as tk
-from tkinter import messagebox
 import json
-import os
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+import RPi.GPIO as GPIO
 
 from audio import AudioPlayer
 from brightness import Backlight
@@ -19,6 +18,7 @@ class AlarmClockApp:
         self.root = root
         self.root.title("Relógio com Alarme")
         self.root.attributes("-fullscreen", True)
+        self.root.configure(bg="black")
 
         # Inicializações
         self.audio = AudioPlayer()
@@ -28,18 +28,23 @@ class AlarmClockApp:
         self.alarms = []
         self.load_config()
 
-        # Widgets
+        # Frame principal para relógio e status
+        self.main_frame = tk.Frame(root, bg="black")
+        self.main_frame.pack(expand=True, fill="both")
+
+        # Label do relógio
         self.time_label = tk.Label(
-            root, text="", font=("Helvetica", 72), fg="white", bg="black"
+            self.main_frame, text="", font=("Helvetica", 72), fg="white", bg="black"
         )
-        self.time_label.pack(expand=True, fill="both")
+        self.time_label.pack(expand=True)
 
+        # Label do status do alarme
         self.status_label = tk.Label(
-            root, text="", font=("Helvetica", 20), fg="yellow", bg="black"
+            self.main_frame, text="", font=("Helvetica", 20), fg="yellow", bg="black"
         )
-        self.status_label.pack(side="bottom", fill="x")
+        self.status_label.pack(pady=5)
 
-        # Frame para botões de controle na tela
+        # Frame dos botões na parte inferior
         self.button_frame = tk.Frame(root, bg="black")
         self.button_frame.pack(side="bottom", fill="x", pady=10)
 
@@ -52,7 +57,7 @@ class AlarmClockApp:
             fg="white",
             command=self.test_alarm
         )
-        self.test_alarm_btn.pack(side="left", padx=20)
+        self.test_alarm_btn.pack(side="left", padx=20, pady=5)
 
         # Botão para parar alarme
         self.stop_alarm_btn = tk.Button(
@@ -63,7 +68,7 @@ class AlarmClockApp:
             fg="white",
             command=self.stop_alarm
         )
-        self.stop_alarm_btn.pack(side="left", padx=20)
+        self.stop_alarm_btn.pack(side="left", padx=20, pady=5)
 
         # Thread de checagem de alarmes
         self.running = True
@@ -125,13 +130,12 @@ class AlarmClockApp:
                     if weekday in alarm.get("days", []):
                         self.trigger_alarm(alarm)
 
-            time.sleep(30)  # checa a cada 30s
+            time.sleep(30)
 
     def trigger_alarm(self, alarm):
-        sound = alarm.get("sound", "assets/alarm.mp3")
         volume = alarm.get("volume", 70)
         AudioPlayer.set_volume(volume)
-        self.audio.play(sound, loop=True)
+        self.audio.play(loop=True)
         self.status_label.config(text=f"Alarme: {alarm.get('label', '')}")
 
     def handle_gpio(self, event):
@@ -156,19 +160,13 @@ class AlarmClockApp:
         self.status_label.config(text="Alarme parado")
 
     def test_alarm(self):
-        """
-        Dispara um alarme de teste manualmente.
-        """
         if self.alarms:
-            # Usa o primeiro alarme cadastrado
             self.trigger_alarm(self.alarms[0])
         else:
-            # Se não houver alarmes cadastrados, cria um temporário
             test_alarm = {
                 "time": datetime.now().strftime("%H:%M"),
                 "days": [0,1,2,3,4,5,6],
                 "label": "Alarme Manual",
-                "sound": "assets/alarm.mp3",
                 "volume": 70
             }
             self.trigger_alarm(test_alarm)
@@ -178,6 +176,7 @@ class AlarmClockApp:
         self.buttons.stop()
         self.audio.stop()
         self.save_config()
+        GPIO.cleanup()  # limpa todos os pinos GPIO
         self.root.destroy()
 
 

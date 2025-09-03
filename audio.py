@@ -3,7 +3,7 @@ import threading
 import time
 
 BUZZER_PIN = 18  # PWM
-GND_PIN = 34     # ligado ao GND do buzzer
+GND_PIN = 34     # conectado ao GND do buzzer
 
 class AudioPlayer:
     def __init__(self):
@@ -40,5 +40,5 @@ class AudioPlayer:
 
     @staticmethod
     def set_volume(percent: int):
-        # volume não é aplicável em buzzer
+        # volume não aplicável para buzzer
         pass
