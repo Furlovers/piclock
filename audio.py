@@ -1,37 +1,37 @@
-import os
-import subprocess
+import RPi.GPIO as GPIO
+import threading
+import time
+
+BUZZER_PIN = 6  # GPIO6
 
 class AudioPlayer:
-    def __init__(self, device=None):
-        self.proc = None
-        self.device = device  # Ex.: 'hw:1,0' se for USB; normalmente None já funciona
+    def __init__(self):
+        self.playing = False
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(BUZZER_PIN, GPIO.OUT)
+        self.thread = None
 
-    def play(self, filepath: str, loop: bool = True):
-        """Toca um arquivo de áudio (MP3/WAV)."""
+    def play(self, filepath=None, loop=True):
+        """Dispara o buzzer (ignora filepath)"""
         self.stop()
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(filepath)
-        # Usa mpg123 para MP3 (loop se necessário)
-        cmd = ["mpg123", "-q"]
-        if self.device:
-            cmd += ["-a", self.device]
-        if loop:
-            cmd += ["--loop", "-1"]
-        cmd += [filepath]
-        self.proc = subprocess.Popen(cmd)
+        self.playing = True
+        self.thread = threading.Thread(target=self._buzz_loop, daemon=True)
+        self.thread.start()
+
+    def _buzz_loop(self):
+        while self.playing:
+            GPIO.output(BUZZER_PIN, GPIO.HIGH)
+            time.sleep(0.5)  # ligado 0.5s
+            GPIO.output(BUZZER_PIN, GPIO.LOW)
+            time.sleep(0.5)  # desligado 0.5s
 
     def stop(self):
-        """Para a reprodução."""
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-        self.proc = None
+        self.playing = False
+        if self.thread:
+            self.thread.join(timeout=0.1)
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
 
     @staticmethod
     def set_volume(percent: int):
-        """Ajusta o volume de saída (0 a 100%)."""
-        p = max(0, min(100, int(percent)))
-        subprocess.run(["amixer", "set", "Master", f"{p}%"], stdout=subprocess.DEVNULL)
+        # volume não é aplicável para buzzer direto
+        pass
