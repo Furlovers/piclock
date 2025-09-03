@@ -1,26 +1,37 @@
-import time
-import threading
+import os
+import subprocess
 
 class AudioPlayer:
     def __init__(self, device=None):
-        self.playing = False
+        self.proc = None
+        self.device = device  # Ex.: 'hw:1,0' se for USB; normalmente None já funciona
 
     def play(self, filepath: str, loop: bool = True):
-        self.playing = True
-        print(f"[DEBUG] Tocando áudio simulado: {filepath} (loop={loop})")
+        """Toca um arquivo de áudio (MP3/WAV)."""
+        self.stop()
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(filepath)
+        # Usa mpg123 para MP3 (loop se necessário)
+        cmd = ["mpg123", "-q"]
+        if self.device:
+            cmd += ["-a", self.device]
         if loop:
-            threading.Thread(target=self._simulate_loop, daemon=True).start()
-
-    def _simulate_loop(self):
-        while self.playing:
-            time.sleep(2)
-            print("[DEBUG] Áudio tocando...")
+            cmd += ["--loop", "-1"]
+        cmd += [filepath]
+        self.proc = subprocess.Popen(cmd)
 
     def stop(self):
-        if self.playing:
-            print("[DEBUG] Parando áudio simulado")
-        self.playing = False
+        """Para a reprodução."""
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        self.proc = None
 
     @staticmethod
     def set_volume(percent: int):
-        print(f"[DEBUG] Volume ajustado para {percent}% (simulado)")
+        """Ajusta o volume de saída (0 a 100%)."""
+        p = max(0, min(100, int(percent)))
+        subprocess.run(["amixer", "set", "Master", f"{p}%"], stdout=subprocess.DEVNULL)
