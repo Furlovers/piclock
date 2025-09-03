@@ -1,18 +1,14 @@
-import RPi.GPIO as GPIO
+from gpiozero import Buzzer
+from signal import pause
 import threading
 import time
 
-BUZZER_PIN = 18  # PWM
-GND_PIN = 34     # conectado ao GND do buzzer
+BUZZER_PIN = 23  # GPIO0 (BCM numbering)
 
 class AudioPlayer:
     def __init__(self):
+        self.buzzer = Buzzer(BUZZER_PIN)
         self.playing = False
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(BUZZER_PIN, GPIO.OUT)
-        GPIO.setup(GND_PIN, GPIO.OUT)
-        GPIO.output(GND_PIN, GPIO.LOW)
-        self.pwm = GPIO.PWM(BUZZER_PIN, 1000)  # frequência inicial 1kHz
         self.thread = None
 
     def play(self, filepath=None, loop=True):
@@ -22,23 +18,19 @@ class AudioPlayer:
         self.thread.start()
 
     def _buzz_loop(self):
-        self.pwm.start(50)  # 50% duty cycle
         while self.playing:
+            self.buzzer.on()
             time.sleep(0.5)
-            self.pwm.ChangeFrequency(1500)
+            self.buzzer.off()
             time.sleep(0.5)
-            self.pwm.ChangeFrequency(1000)
-        self.pwm.stop()
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
 
     def stop(self):
         self.playing = False
         if self.thread:
             self.thread.join(timeout=0.1)
-        self.pwm.stop()
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
+        self.buzzer.off()
 
     @staticmethod
     def set_volume(percent: int):
-        # volume não aplicável para buzzer
+        # Não aplicável para buzzer direto
         pass
