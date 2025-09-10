@@ -1,546 +1,213 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 import json
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
-import RPi.GPIO as GPIO
 
-from brightness import Backlight
-from rtc_sync import RTC
-from gpio_buttons import GpioButtons
+# --- GPIO e Buzzer ---
+try:
+    import RPi.GPIO as GPIO
+    RPI_ENV = True
+except ImportError:
+    print(">>> Rodando em modo PC (sem Raspberry Pi). GPIO desativado.")
+    RPI_ENV = False
 
+    class GPIO:
+        BCM = "BCM"
+        OUT = "OUT"
+        LOW = 0
+        HIGH = 1
+        @staticmethod
+        def setmode(mode): print(f"[GPIO] setmode({mode})")
+        @staticmethod
+        def setwarnings(flag): pass
+        @staticmethod
+        def setup(pin, mode): print(f"[GPIO] setup(pin={pin}, mode={mode})")
+        @staticmethod
+        def output(pin, value): print(f"[GPIO] output(pin={pin}, value={value})")
+        @staticmethod
+        def cleanup(): print("[GPIO] cleanup()")
+
+
+class AudioPlayer:
+    buzzer_pins = [15, 18]   # agora dois pinos
+    _is_playing = False
+
+    @staticmethod
+    def setup():
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        for pin in AudioPlayer.buzzer_pins:
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, GPIO.LOW)
+
+    @staticmethod
+    def play(volume=70):
+        if AudioPlayer._is_playing:
+            return
+        AudioPlayer._is_playing = True
+        threading.Thread(target=AudioPlayer._buzz, daemon=True).start()
+
+    @staticmethod
+    def stop():
+        AudioPlayer._is_playing = False
+        for pin in AudioPlayer.buzzer_pins:
+            GPIO.output(pin, GPIO.LOW)
+
+    @staticmethod
+    def is_playing():
+        return AudioPlayer._is_playing
+
+    @staticmethod
+    def _buzz():
+        while AudioPlayer._is_playing:
+            for pin in AudioPlayer.buzzer_pins:
+                GPIO.output(pin, GPIO.HIGH)
+            time.sleep(0.2)
+            for pin in AudioPlayer.buzzer_pins:
+                GPIO.output(pin, GPIO.LOW)
+            time.sleep(0.2)
+
+
+# --- App Principal ---
 CONFIG_FILE = "config.json"
-
-
-class AlarmDialog:
-    def __init__(self, parent, alarm=None, index=None):
-        self.parent = parent
-        self.alarm = alarm or {}
-        self.index = index
-        self.is_edit = alarm is not None
-
-        # Criar janela de diálogo
-        self.dialog = tk.Toplevel(parent.root)
-        self.dialog.title("Adicionar Alarme" if not self.is_edit else "Editar Alarme")
-        self.dialog.geometry("400x500")
-        self.dialog.resizable(False, False)
-        self.dialog.configure(bg="#0a0a0a")
-        self.dialog.grab_set()  # Tornar modal
-
-        # Centralizar na tela
-        self.dialog.transient(parent.root)
-        self.dialog.update_idletasks()
-        x = parent.root.winfo_x() + (parent.root.winfo_width() - self.dialog.winfo_width()) // 2
-        y = parent.root.winfo_y() + (parent.root.winfo_height() - self.dialog.winfo_height()) // 2
-        self.dialog.geometry(f"+{x}+{y}")
-
-        # Configuração de estilo
-        self.colors = {
-            "background": "#0a0a0a",
-            "primary": "#2e86de",
-            "secondary": "#a29bfe",
-            "accent": "#ff6b6b",
-            "text": "#ffffff",
-            "text_secondary": "#b2bec3",
-            "success": "#1dd1a1",
-            "warning": "#feca57",
-            "danger": "#ff6b6b",
-        }
-
-        self.create_widgets()
-        self.load_alarm_data()
-
-    def create_widgets(self):
-        # Frame principal
-        main_frame = tk.Frame(self.dialog, bg=self.colors["background"], padx=20, pady=20)
-        main_frame.pack(fill="both", expand=True)
-
-        # Título
-        title = tk.Label(
-            main_frame,
-            text="Adicionar Alarme" if not self.is_edit else "Editar Alarme",
-            font=("Helvetica", 18, "bold"),
-            fg=self.colors["primary"],
-            bg=self.colors["background"],
-        )
-        title.pack(pady=(0, 20))
-
-        # Label para o alarme
-        tk.Label(
-            main_frame,
-            text="Descrição:",
-            font=("Helvetica", 12),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-        ).pack(anchor="w", pady=(5, 0))
-
-        self.label_entry = tk.Entry(
-            main_frame,
-            font=("Helvetica", 14),
-            bg="#2d3436",
-            fg=self.colors["text"],
-            insertbackground="white",
-        )
-        self.label_entry.pack(fill="x", pady=(5, 10))
-
-        # Hora do alarme
-        time_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        time_frame.pack(fill="x", pady=10)
-
-        tk.Label(
-            time_frame,
-            text="Horário:",
-            font=("Helvetica", 12),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-        ).pack(anchor="w")
-
-        # Frame para hora e minutos
-        time_input_frame = tk.Frame(time_frame, bg=self.colors["background"])
-        time_input_frame.pack(fill="x", pady=(5, 0))
-
-        # Hora
-        self.hour_var = tk.StringVar(value="00")
-        hour_spinbox = tk.Spinbox(
-            time_input_frame,
-            from_=0,
-            to=23,
-            format="%02.0f",
-            textvariable=self.hour_var,
-            width=5,
-            font=("Helvetica", 14),
-            bg="#2d3436",
-            fg=self.colors["text"],
-            justify="center",
-        )
-        hour_spinbox.pack(side="left", padx=(0, 5))
-
-        tk.Label(
-            time_input_frame,
-            text=":",
-            font=("Helvetica", 14),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-        ).pack(side="left")
-
-        # Minutos
-        self.minute_var = tk.StringVar(value="00")
-        minute_spinbox = tk.Spinbox(
-            time_input_frame,
-            from_=0,
-            to=59,
-            format="%02.0f",
-            textvariable=self.minute_var,
-            width=5,
-            font=("Helvetica", 14),
-            bg="#2d3436",
-            fg=self.colors["text"],
-            justify="center",
-        )
-        minute_spinbox.pack(side="left", padx=(5, 0))
-
-        # Dias da semana
-        tk.Label(
-            main_frame,
-            text="Repetir:",
-            font=("Helvetica", 12),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-        ).pack(anchor="w", pady=(15, 5))
-
-        days_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        days_frame.pack(fill="x", pady=(5, 10))
-
-        self.days_vars = []
-        days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-
-        for i, day in enumerate(days):
-            var = tk.BooleanVar()
-            self.days_vars.append(var)
-
-            cb = tk.Checkbutton(
-                days_frame,
-                text=day,
-                variable=var,
-                font=("Helvetica", 10),
-                fg=self.colors["text"],
-                bg=self.colors["background"],
-                selectcolor=self.colors["primary"],
-                activebackground=self.colors["background"],
-                activeforeground=self.colors["text"],
-            )
-            cb.grid(row=0, column=i, padx=2)
-
-        # Volume
-        tk.Label(
-            main_frame,
-            text="Volume:",
-            font=("Helvetica", 12),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-        ).pack(anchor="w", pady=(15, 5))
-
-        self.volume_var = tk.IntVar(value=70)
-        volume_scale = tk.Scale(
-            main_frame,
-            from_=0,
-            to=100,
-            orient="horizontal",
-            variable=self.volume_var,
-            bg=self.colors["background"],
-            fg=self.colors["text"],
-            troughcolor="#2d3436",
-            highlightbackground=self.colors["background"],
-            sliderrelief="flat",
-            length=300,
-        )
-        volume_scale.pack(fill="x", pady=(5, 10))
-
-        # Ativo/Inativo
-        self.enabled_var = tk.BooleanVar(value=True)
-        enabled_cb = tk.Checkbutton(
-            main_frame,
-            text="Ativo",
-            variable=self.enabled_var,
-            font=("Helvetica", 12),
-            fg=self.colors["text"],
-            bg=self.colors["background"],
-            selectcolor=self.colors["primary"],
-            activebackground=self.colors["background"],
-            activeforeground=self.colors["text"],
-        )
-        enabled_cb.pack(anchor="w", pady=(10, 20))
-
-        # Botões
-        button_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        button_frame.pack(fill="x", pady=(10, 0))
-
-        if self.is_edit:
-            delete_btn = tk.Button(
-                button_frame,
-                text="Excluir",
-                font=("Helvetica", 12, "bold"),
-                bg=self.colors["danger"],
-                fg="white",
-                relief="flat",
-                padx=15,
-                pady=8,
-                command=self.delete_alarm,
-                cursor="hand2",
-            )
-            delete_btn.pack(side="left", padx=(0, 10))
-
-        cancel_btn = tk.Button(
-            button_frame,
-            text="Cancelar",
-            font=("Helvetica", 12, "bold"),
-            bg="#636e72",
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=8,
-            command=self.dialog.destroy,
-            cursor="hand2",
-        )
-        cancel_btn.pack(side="right", padx=(10, 0))
-
-        save_btn = tk.Button(
-            button_frame,
-            text="Salvar",
-            font=("Helvetica", 12, "bold"),
-            bg=self.colors["success"],
-            fg="white",
-            relief="flat",
-            padx=15,
-            pady=8,
-            command=self.save_alarm,
-            cursor="hand2",
-        )
-        save_btn.pack(side="right")
-
-    def load_alarm_data(self):
-        if self.alarm:
-            self.label_entry.insert(0, self.alarm.get("label", ""))
-            if "time" in self.alarm:
-                time_parts = self.alarm["time"].split(":")
-                self.hour_var.set(time_parts[0])
-                self.minute_var.set(time_parts[1])
-            if "days" in self.alarm:
-                for i, day in enumerate(self.alarm["days"]):
-                    if i < len(self.days_vars):
-                        self.days_vars[i].set(day)
-            self.volume_var.set(self.alarm.get("volume", 70))
-            self.enabled_var.set(self.alarm.get("enabled", True))
-
-    def save_alarm(self):
-        label = self.label_entry.get().strip()
-        if not label:
-            messagebox.showerror("Erro", "Por favor, insira uma descrição para o alarme.")
-            return
-
-        try:
-            hour = int(self.hour_var.get())
-            minute = int(self.minute_var.get())
-            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Erro", "Por favor, insira um horário válido.")
-            return
-
-        days = []
-        for i, var in enumerate(self.days_vars):
-            if var.get():
-                days.append(i)
-
-        if not days:
-            messagebox.showerror("Erro", "Selecione pelo menos um dia da semana.")
-            return
-
-        alarm_data = {
-            "label": label,
-            "time": f"{hour:02d}:{minute:02d}",
-            "days": days,
-            "volume": self.volume_var.get(),
-            "enabled": self.enabled_var.get(),
-        }
-
-        if self.is_edit:
-            self.parent.update_alarm(self.index, alarm_data)
-        else:
-            self.parent.add_alarm(alarm_data)
-
-        self.dialog.destroy()
-
-    def delete_alarm(self):
-        if messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir este alarme?"):
-            self.parent.delete_alarm(self.index)
-            self.dialog.destroy()
 
 
 class AlarmClockApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Relógio Inteligente")
-        self.root.attributes("-fullscreen", True)
+        self.root.title("Relógio com Alarme")
+        self.root.geometry("800x480")  # ajuste para tela 7"
+        self.root.resizable(False, False)
         self.root.configure(bg="#0a0a0a")
 
         self.colors = {
             "background": "#0a0a0a",
-            "primary": "#2e86de",
-            "secondary": "#a29bfe",
-            "accent": "#ff6b6b",
-            "text": "#ffffff",
-            "text_secondary": "#b2bec3",
-            "success": "#1dd1a1",
-            "warning": "#feca57",
-            "danger": "#ff6b6b",
+            "primary": "#00ffcc",
+            "danger": "#ff5555",
+            "success": "#55ff55",
+            "warning": "#ffaa00",
+            "text_secondary": "#cccccc",
         }
-
-        self.audio = AudioPlayer()
-        self.buttons = GpioButtons(callback=self.handle_gpio)
-        self.buttons.start()
 
         self.alarms = []
         self.load_config()
 
+        # Frame principal
         self.main_frame = tk.Frame(root, bg=self.colors["background"])
         self.main_frame.pack(expand=True, fill="both")
 
+        # Data
         self.date_label = tk.Label(
             self.main_frame,
             text="",
+            font=("Helvetica", 18),
+            fg=self.colors["text_secondary"],
+            bg=self.colors["background"],
+        )
+        self.date_label.pack(pady=(20, 0))
+
+        # Hora
+        self.time_label = tk.Label(
+            self.main_frame,
+            text="",
+            font=("Helvetica", 72, "bold"),
+            fg=self.colors["primary"],
+            bg=self.colors["background"],
+        )
+        self.time_label.pack(expand=True, pady=10)
+
+        # Status
+        self.status_label = tk.Label(
+            self.main_frame,
+            text="Nenhum alarme ativo",
             font=("Helvetica", 20),
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
-        self.date_label.pack(pady=(40, 0))
+        self.status_label.pack(pady=5)
 
-        self.time_label = tk.Label(
-            self.main_frame,
-            text="",
-            font=("Helvetica", 96, "bold"),
-            fg=self.colors["primary"],
-            bg=self.colors["background"],
-        )
-        self.time_label.pack(expand=True, pady=20)
-
-        self.status_label = tk.Label(
-            self.main_frame,
-            text="Nenhum alarme ativo",
-            font=("Helvetica", 24),
-            fg=self.colors["text_secondary"],
-            bg=self.colors["background"],
-        )
-        self.status_label.pack(pady=10)
-
+        # Próximo alarme
         self.next_alarm_label = tk.Label(
             self.main_frame,
             text="",
-            font=("Helvetica", 16),
+            font=("Helvetica", 14),
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
         self.next_alarm_label.pack(pady=5)
-        self.update_next_alarm()
 
-        self.button_frame = tk.Frame(root, bg=self.colors["background"])
-        self.button_frame.pack(side="bottom", fill="x", pady=20)
+        # Botões
+        btn_frame = tk.Frame(self.main_frame, bg=self.colors["background"])
+        btn_frame.pack(side="bottom", pady=20)
 
-        self.add_alarm_btn = tk.Button(
-            self.button_frame,
-            text="+",
-            font=("Helvetica", 20, "bold"),
-            bg=self.colors["success"],
-            fg="white",
-            relief="flat",
-            width=3,
-            height=1,
-            command=self.show_alarm_dialog,
-            cursor="hand2",
-        )
-        self.add_alarm_btn.pack(side="left", padx=20, pady=5)
-
-        self.test_alarm_btn = tk.Button(
-            self.button_frame,
+        self.test_button = tk.Button(
+            btn_frame,
             text="Testar Alarme",
-            font=("Helvetica", 16, "bold"),
-            bg=self.colors["accent"],
-            fg="white",
-            relief="flat",
-            padx=20,
-            pady=10,
             command=self.test_alarm,
-            cursor="hand2",
-        )
-        self.test_alarm_btn.pack(side="left", padx=20, pady=5)
-
-        self.stop_alarm_btn = tk.Button(
-            self.button_frame,
-            text="Parar Alarme",
-            font=("Helvetica", 16, "bold"),
-            bg=self.colors["danger"],
+            font=("Helvetica", 16),
+            width=14,
+            bg="#222222",
             fg="white",
-            relief="flat",
-            padx=20,
-            pady=10,
+        )
+        self.test_button.grid(row=0, column=0, padx=15)
+
+        self.stop_button = tk.Button(
+            btn_frame,
+            text="Parar",
             command=self.stop_alarm,
-            cursor="hand2",
+            font=("Helvetica", 16),
+            width=14,
+            bg="#222222",
+            fg="white",
         )
-        self.stop_alarm_btn.pack(side="left", padx=20, pady=5)
+        self.stop_button.grid(row=0, column=1, padx=15)
 
+        # Status visual (indicador)
         self.status_indicator = tk.Canvas(
-            self.button_frame, width=30, height=30, bg=self.colors["background"], highlightthickness=0
+            self.main_frame,
+            width=25,
+            height=25,
+            bg=self.colors["background"],
+            highlightthickness=0,
         )
-        self.status_indicator.pack(side="right", padx=20)
-        self.indicator = self.status_indicator.create_oval(5, 5, 25, 25, fill=self.colors["success"], outline="")
+        self.status_indicator.pack(pady=5)
+        self.indicator = self.status_indicator.create_oval(
+            3, 3, 22, 22, fill=self.colors["success"]
+        )
 
+        # Threads
         self.running = True
         self.alarm_thread = threading.Thread(target=self.check_alarms, daemon=True)
         self.alarm_thread.start()
 
         self.update_clock()
 
-    def show_alarm_dialog(self, alarm=None, index=None):
-        AlarmDialog(self, alarm, index)
-
-    def add_alarm(self, alarm_data):
-        self.alarms.append(alarm_data)
-        self.save_config()
-        self.update_next_alarm()
-
-    def update_alarm(self, index, alarm_data):
-        if 0 <= index < len(self.alarms):
-            self.alarms[index] = alarm_data
-            self.save_config()
-            self.update_next_alarm()
-
-    def delete_alarm(self, index):
-        if 0 <= index < len(self.alarms):
-            self.alarms.pop(index)
-            self.save_config()
-            self.update_next_alarm()
-
-    def update_next_alarm(self):
-        next_alarm = self.get_next_alarm()
-        if next_alarm:
-            days_map = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-            days_str = ", ".join([days_map[d] for d in next_alarm["days"]])
-            self.next_alarm_label.config(text=f"Próximo: {next_alarm['time']} ({days_str}) - {next_alarm['label']}")
-        else:
-            self.next_alarm_label.config(text="Nenhum alarme programado")
-
-    def get_next_alarm(self):
-        now = datetime.now()
-        current_time = now.strftime("%H:%M")
-        current_weekday = now.weekday()
-
-        enabled_alarms = [a for a in self.alarms if a.get("enabled", False)]
-        if not enabled_alarms:
-            return None
-
-        enabled_alarms.sort(key=lambda x: x["time"])
-
-        for alarm in enabled_alarms:
-            if alarm["time"] > current_time and current_weekday in alarm.get("days", []):
-                return alarm
-
-        for i in range(1, 8):
-            next_day = (current_weekday + i) % 7
-            for alarm in enabled_alarms:
-                if next_day in alarm.get("days", []):
-                    return alarm
-
-        return None
-
     def load_config(self):
-        try:
-            if not Path(CONFIG_FILE).exists():
-                raise FileNotFoundError
-
-            with open(CONFIG_FILE) as f:
-                cfg = json.load(f)
-
-        except (FileNotFoundError, json.JSONDecodeError):
-            cfg = {
+        if not Path(CONFIG_FILE).exists():
+            default_cfg = {
                 "alarms": [],
                 "snooze_minutes": 10,
-                "brightness": 180,
-                "auto_dim": {"enabled": False, "night": 40, "start": "22:30", "end": "06:30"},
             }
             with open(CONFIG_FILE, "w") as f:
-                json.dump(cfg, f, indent=2)
+                json.dump(default_cfg, f, indent=2)
 
-        self.alarms = cfg.get("alarms", [])
-        self.snooze_minutes = cfg.get("snooze_minutes", 10)
-        self.brightness = cfg.get("brightness", 180)
-        self.auto_dim = cfg.get("auto_dim", {})
-
-        Backlight.set(self.brightness)
+        with open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+            self.alarms = cfg.get("alarms", [])
+            self.snooze_minutes = cfg.get("snooze_minutes", 10)
 
     def save_config(self):
-        cfg = {
-            "alarms": self.alarms,
-            "snooze_minutes": self.snooze_minutes,
-            "brightness": self.brightness,
-            "auto_dim": self.auto_dim,
-        }
+        cfg = {"alarms": self.alarms, "snooze_minutes": self.snooze_minutes}
         with open(CONFIG_FILE, "w") as f:
             json.dump(cfg, f, indent=2)
 
     def update_clock(self):
         now = datetime.now()
-        time_str = now.strftime("%H:%M:%S")
-        date_str = now.strftime("%A, %d %B %Y").title()
-
-        if int(now.second) % 2 == 0:
-            time_str = time_str.replace(":", " ")
-        else:
-            time_str = time_str.replace(" ", ":")
-
-        self.time_label.config(text=time_str)
-        self.date_label.config(text=date_str)
+        self.date_label.config(text=now.strftime("%A, %d %B %Y"))
+        self.time_label.config(text=now.strftime("%H:%M:%S"))
         self.root.after(1000, self.update_clock)
 
     def check_alarms(self):
@@ -556,9 +223,8 @@ class AlarmClockApp:
             time.sleep(30)
 
     def trigger_alarm(self, alarm):
-        volume = alarm.get("volume", 70)
-        AudioPlayer.play(volume)
-        self.status_label.config(text=f"Alarme: {alarm['label']}")
+        AudioPlayer.play()
+        self.status_label.config(text=f"Alarme: {alarm.get('label','')}")
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["danger"])
 
     def stop_alarm(self):
@@ -567,58 +233,17 @@ class AlarmClockApp:
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["success"])
 
     def test_alarm(self):
-        AudioPlayer.play(70)
+        AudioPlayer.play()
         self.status_label.config(text="🔔 Testando alarme")
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["warning"])
         self.root.after(5000, self.stop_alarm)
 
-    def handle_gpio(self, button):
-        if button == "stop":
-            self.stop_alarm()
-        elif button == "snooze":
-            self.stop_alarm()
-            self.root.after(self.snooze_minutes * 60 * 1000, lambda: AudioPlayer.play(70))
-
     def on_close(self):
         self.running = False
-        self.buttons.cleanup()
+        AudioPlayer.stop()
+        GPIO.cleanup()
+        self.save_config()
         self.root.destroy()
-
-
-class AudioPlayer:
-    buzzer_pin = 23
-    _is_playing = False
-
-    @staticmethod
-    def setup():
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        GPIO.setup(AudioPlayer.buzzer_pin, GPIO.OUT)
-        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-
-    @staticmethod
-    def play(volume=70):
-        if AudioPlayer._is_playing:
-            return
-        AudioPlayer._is_playing = True
-        threading.Thread(target=AudioPlayer._buzz, daemon=True).start()
-
-    @staticmethod
-    def stop():
-        AudioPlayer._is_playing = False
-        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-
-    @staticmethod
-    def is_playing():
-        return AudioPlayer._is_playing
-
-    @staticmethod
-    def _buzz():
-        while AudioPlayer._is_playing:
-            GPIO.output(AudioPlayer.buzzer_pin, GPIO.HIGH)
-            time.sleep(0.2)
-            GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-            time.sleep(0.2)
 
 
 def main():
