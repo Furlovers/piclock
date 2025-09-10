@@ -152,23 +152,8 @@ def weather_icon_from_owm(main: str, descr: str) -> str:
 
 
 def fetch_weather(city: str, country: str, api_key: str):
-    if not api_key:
-        return None
-    url = (
-        f"https://api.openweathermap.org/data/2.5/weather?q={city},{country}"
-        f"&units=metric&lang=pt_br&appid={api_key}"
-    )
-    data = http_get_json(url)
-    if not data or "main" not in data:
-        return None
-    try:
-        temp = round(float(data["main"]["temp"]))
-        main = data["weather"][0].get("main", "")
-        descr = data["weather"][0].get("description", "")
-        icon = weather_icon_from_owm(main, descr)
-        return {"temp": temp, "descr": descr, "icon": icon}
-    except Exception:
-        return None
+    """Retorna dados FIXOS de clima conforme solicitado: nublado 19ºC."""
+    return {"temp": 19, "descr": "nublado", "icon": "☁️"}
 
 # ====== MODELO DE DADOS ======
 class Alarm:
