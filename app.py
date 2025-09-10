@@ -498,7 +498,7 @@ class AlarmListDialog:
         )
         title.pack(pady=(60, 20))
 
-        # Frame principal com canvas e scrollbar
+        # Frame principal com canvas и scrollbar
         main_frame = tk.Frame(self.dialog, bg=self.colors["background"])
         main_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
@@ -979,6 +979,7 @@ class AlarmClockApp:
             time_str = time_str.replace(":", " ")
         else:
             time_str = time_str.replace(" ", ":")
+
 
         self.time_label.config(text=time_str)
         self.date_label.config(text=date_str)
