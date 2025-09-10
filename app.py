@@ -7,11 +7,54 @@ from datetime import datetime
 from pathlib import Path
 import RPi.GPIO as GPIO
 
-from brightness import Backlight
-from rtc_sync import RTC
-from gpio_buttons import GpioButtons
-
 CONFIG_FILE = "config.json"
+
+# Configuração de estilo para tela de 7 polegadas
+SCREEN_CONFIG = {
+    "font_time": ("Helvetica", 64, "bold"),
+    "font_date": ("Helvetica", 16),
+    "font_status": ("Helvetica", 18),
+    "font_next_alarm": ("Helvetica", 12),
+    "font_buttons": ("Helvetica", 12, "bold"),
+    "button_padx": 10,
+    "button_pady": 6,
+    "main_pady": 10
+}
+
+class AudioPlayer:
+    buzzer_pin = 23
+    _is_playing = False
+
+    @staticmethod
+    def setup():
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(AudioPlayer.buzzer_pin, GPIO.OUT)
+        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
+
+    @staticmethod
+    def play(volume=70):
+        if AudioPlayer._is_playing:
+            return
+        AudioPlayer._is_playing = True
+        threading.Thread(target=AudioPlayer._buzz, daemon=True).start()
+
+    @staticmethod
+    def stop():
+        AudioPlayer._is_playing = False
+        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
+
+    @staticmethod
+    def is_playing():
+        return AudioPlayer._is_playing
+
+    @staticmethod
+    def _buzz():
+        while AudioPlayer._is_playing:
+            GPIO.output(AudioPlayer.buzzer_pin, GPIO.HIGH)
+            time.sleep(0.2)
+            GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
+            time.sleep(0.2)
 
 
 class AlarmDialog:
@@ -24,10 +67,10 @@ class AlarmDialog:
         # Criar janela de diálogo
         self.dialog = tk.Toplevel(parent.root)
         self.dialog.title("Adicionar Alarme" if not self.is_edit else "Editar Alarme")
-        self.dialog.geometry("400x500")
+        self.dialog.geometry("360x480")  # Tamanho reduzido para tela menor
         self.dialog.resizable(False, False)
         self.dialog.configure(bg="#0a0a0a")
-        self.dialog.grab_set()  # Tornar modal
+        self.dialog.grab_set()
 
         # Centralizar na tela
         self.dialog.transient(parent.root)
@@ -37,48 +80,38 @@ class AlarmDialog:
         self.dialog.geometry(f"+{x}+{y}")
 
         # Configuração de estilo
-        self.colors = {
-            "background": "#0a0a0a",
-            "primary": "#2e86de",
-            "secondary": "#a29bfe",
-            "accent": "#ff6b6b",
-            "text": "#ffffff",
-            "text_secondary": "#b2bec3",
-            "success": "#1dd1a1",
-            "warning": "#feca57",
-            "danger": "#ff6b6b",
-        }
+        self.colors = parent.colors
 
         self.create_widgets()
         self.load_alarm_data()
 
     def create_widgets(self):
         # Frame principal
-        main_frame = tk.Frame(self.dialog, bg=self.colors["background"], padx=20, pady=20)
+        main_frame = tk.Frame(self.dialog, bg=self.colors["background"], padx=15, pady=15)
         main_frame.pack(fill="both", expand=True)
 
         # Título
         title = tk.Label(
             main_frame,
             text="Adicionar Alarme" if not self.is_edit else "Editar Alarme",
-            font=("Helvetica", 18, "bold"),
+            font=("Helvetica", 16, "bold"),
             fg=self.colors["primary"],
             bg=self.colors["background"],
         )
-        title.pack(pady=(0, 20))
+        title.pack(pady=(0, 15))
 
-        # Label para o alarme
+        # Descrição do alarme
         tk.Label(
             main_frame,
             text="Descrição:",
-            font=("Helvetica", 12),
+            font=("Helvetica", 11),
             fg=self.colors["text"],
             bg=self.colors["background"],
         ).pack(anchor="w", pady=(5, 0))
 
         self.label_entry = tk.Entry(
             main_frame,
-            font=("Helvetica", 14),
+            font=("Helvetica", 12),
             bg="#2d3436",
             fg=self.colors["text"],
             insertbackground="white",
@@ -87,30 +120,29 @@ class AlarmDialog:
 
         # Hora do alarme
         time_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        time_frame.pack(fill="x", pady=10)
+        time_frame.pack(fill="x", pady=8)
 
         tk.Label(
             time_frame,
             text="Horário:",
-            font=("Helvetica", 12),
+            font=("Helvetica", 11),
             fg=self.colors["text"],
             bg=self.colors["background"],
         ).pack(anchor="w")
 
-        # Frame para hora e minutos
         time_input_frame = tk.Frame(time_frame, bg=self.colors["background"])
         time_input_frame.pack(fill="x", pady=(5, 0))
 
         # Hora
-        self.hour_var = tk.StringVar(value="00")
+        self.hour_var = tk.StringVar(value="07")
         hour_spinbox = tk.Spinbox(
             time_input_frame,
             from_=0,
             to=23,
             format="%02.0f",
             textvariable=self.hour_var,
-            width=5,
-            font=("Helvetica", 14),
+            width=4,
+            font=("Helvetica", 12),
             bg="#2d3436",
             fg=self.colors["text"],
             justify="center",
@@ -120,7 +152,7 @@ class AlarmDialog:
         tk.Label(
             time_input_frame,
             text=":",
-            font=("Helvetica", 14),
+            font=("Helvetica", 12),
             fg=self.colors["text"],
             bg=self.colors["background"],
         ).pack(side="left")
@@ -133,8 +165,8 @@ class AlarmDialog:
             to=59,
             format="%02.0f",
             textvariable=self.minute_var,
-            width=5,
-            font=("Helvetica", 14),
+            width=4,
+            font=("Helvetica", 12),
             bg="#2d3436",
             fg=self.colors["text"],
             justify="center",
@@ -145,31 +177,32 @@ class AlarmDialog:
         tk.Label(
             main_frame,
             text="Repetir:",
-            font=("Helvetica", 12),
+            font=("Helvetica", 11),
             fg=self.colors["text"],
             bg=self.colors["background"],
-        ).pack(anchor="w", pady=(15, 5))
+        ).pack(anchor="w", pady=(12, 5))
 
         days_frame = tk.Frame(main_frame, bg=self.colors["background"])
         days_frame.pack(fill="x", pady=(5, 10))
 
         self.days_vars = []
-        days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+        days = ["S", "T", "Q", "Q", "S", "S", "D"]  # Abreviado para caber na tela
 
         for i, day in enumerate(days):
-            var = tk.BooleanVar()
+            var = tk.BooleanVar(value=True if i < 5 else False)  # Seg-Sex marcados por padrão
             self.days_vars.append(var)
 
             cb = tk.Checkbutton(
                 days_frame,
                 text=day,
                 variable=var,
-                font=("Helvetica", 10),
+                font=("Helvetica", 10, "bold"),
                 fg=self.colors["text"],
                 bg=self.colors["background"],
                 selectcolor=self.colors["primary"],
                 activebackground=self.colors["background"],
                 activeforeground=self.colors["text"],
+                width=2
             )
             cb.grid(row=0, column=i, padx=2)
 
@@ -177,10 +210,10 @@ class AlarmDialog:
         tk.Label(
             main_frame,
             text="Volume:",
-            font=("Helvetica", 12),
+            font=("Helvetica", 11),
             fg=self.colors["text"],
             bg=self.colors["background"],
-        ).pack(anchor="w", pady=(15, 5))
+        ).pack(anchor="w", pady=(12, 5))
 
         self.volume_var = tk.IntVar(value=70)
         volume_scale = tk.Scale(
@@ -194,7 +227,7 @@ class AlarmDialog:
             troughcolor="#2d3436",
             highlightbackground=self.colors["background"],
             sliderrelief="flat",
-            length=300,
+            length=250
         )
         volume_scale.pack(fill="x", pady=(5, 10))
 
@@ -204,14 +237,14 @@ class AlarmDialog:
             main_frame,
             text="Ativo",
             variable=self.enabled_var,
-            font=("Helvetica", 12),
+            font=("Helvetica", 11),
             fg=self.colors["text"],
             bg=self.colors["background"],
             selectcolor=self.colors["primary"],
             activebackground=self.colors["background"],
             activeforeground=self.colors["text"],
         )
-        enabled_cb.pack(anchor="w", pady=(10, 20))
+        enabled_cb.pack(anchor="w", pady=(10, 15))
 
         # Botões
         button_frame = tk.Frame(main_frame, bg=self.colors["background"])
@@ -221,44 +254,44 @@ class AlarmDialog:
             delete_btn = tk.Button(
                 button_frame,
                 text="Excluir",
-                font=("Helvetica", 12, "bold"),
+                font=("Helvetica", 11, "bold"),
                 bg=self.colors["danger"],
                 fg="white",
                 relief="flat",
-                padx=15,
-                pady=8,
+                padx=12,
+                pady=6,
                 command=self.delete_alarm,
                 cursor="hand2",
             )
-            delete_btn.pack(side="left", padx=(0, 10))
+            delete_btn.pack(side="left", padx=(0, 8))
 
         cancel_btn = tk.Button(
             button_frame,
             text="Cancelar",
-            font=("Helvetica", 12, "bold"),
+            font=("Helvetica", 11, "bold"),
             bg="#636e72",
             fg="white",
             relief="flat",
-            padx=15,
-            pady=8,
+            padx=12,
+            pady=6,
             command=self.dialog.destroy,
             cursor="hand2",
         )
-        cancel_btn.pack(side="right", padx=(10, 0))
+        cancel_btn.pack(side="right", padx=(8, 0))
 
         save_btn = tk.Button(
             button_frame,
             text="Salvar",
-            font=("Helvetica", 12, "bold"),
+            font=("Helvetica", 11, "bold"),
             bg=self.colors["success"],
             fg="white",
             relief="flat",
-            padx=15,
-            pady=8,
+            padx=12,
+            pady=6,
             command=self.save_alarm,
             cursor="hand2",
         )
-        save_btn.pack(side="right")
+        save_btn.pack(side="right", padx=(0, 8))
 
     def load_alarm_data(self):
         if self.alarm:
@@ -338,104 +371,117 @@ class AlarmClockApp:
             "danger": "#ff6b6b",
         }
 
-        self.audio = AudioPlayer()
-        self.buttons = GpioButtons(callback=self.handle_gpio)
-        self.buttons.start()
+        # Inicializar player de áudio
+        AudioPlayer.setup()
 
+        # Simular botões GPIO (substitua pela sua implementação real)
+        self.buttons = type('Obj', (object,), {'start': lambda: None, 'cleanup': lambda: None})()
+        
         self.alarms = []
         self.load_config()
 
+        # Layout principal otimizado para tela pequena
         self.main_frame = tk.Frame(root, bg=self.colors["background"])
-        self.main_frame.pack(expand=True, fill="both")
+        self.main_frame.pack(expand=True, fill="both", pady=SCREEN_CONFIG["main_pady"])
 
+        # Data atual (menor)
         self.date_label = tk.Label(
             self.main_frame,
             text="",
-            font=("Helvetica", 20),
+            font=SCREEN_CONFIG["font_date"],
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
-        self.date_label.pack(pady=(40, 0))
+        self.date_label.pack(pady=(20, 5))
 
+        # Hora (tamanho reduzido)
         self.time_label = tk.Label(
             self.main_frame,
             text="",
-            font=("Helvetica", 96, "bold"),
+            font=SCREEN_CONFIG["font_time"],
             fg=self.colors["primary"],
             bg=self.colors["background"],
         )
-        self.time_label.pack(expand=True, pady=20)
+        self.time_label.pack(expand=True, pady=10)
 
+        # Status do alarme
         self.status_label = tk.Label(
             self.main_frame,
             text="Nenhum alarme ativo",
-            font=("Helvetica", 24),
+            font=SCREEN_CONFIG["font_status"],
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
-        self.status_label.pack(pady=10)
+        self.status_label.pack(pady=8)
 
+        # Próximo alarme (menor)
         self.next_alarm_label = tk.Label(
             self.main_frame,
             text="",
-            font=("Helvetica", 16),
+            font=SCREEN_CONFIG["font_next_alarm"],
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
         self.next_alarm_label.pack(pady=5)
         self.update_next_alarm()
 
+        # Frame dos botões (mais compacto)
         self.button_frame = tk.Frame(root, bg=self.colors["background"])
-        self.button_frame.pack(side="bottom", fill="x", pady=20)
+        self.button_frame.pack(side="bottom", fill="x", pady=10)
 
+        # Botão para adicionar alarme (menor)
         self.add_alarm_btn = tk.Button(
             self.button_frame,
             text="+",
-            font=("Helvetica", 20, "bold"),
+            font=("Helvetica", 16, "bold"),
             bg=self.colors["success"],
             fg="white",
             relief="flat",
-            width=3,
+            width=2,
             height=1,
             command=self.show_alarm_dialog,
             cursor="hand2",
         )
-        self.add_alarm_btn.pack(side="left", padx=20, pady=5)
+        self.add_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
+        # Botão para testar alarme (menor)
         self.test_alarm_btn = tk.Button(
             self.button_frame,
-            text="Testar Alarme",
-            font=("Helvetica", 16, "bold"),
+            text="Testar",
+            font=SCREEN_CONFIG["font_buttons"],
             bg=self.colors["accent"],
             fg="white",
             relief="flat",
-            padx=20,
-            pady=10,
+            padx=15,
+            pady=SCREEN_CONFIG["button_pady"],
             command=self.test_alarm,
             cursor="hand2",
         )
-        self.test_alarm_btn.pack(side="left", padx=20, pady=5)
+        self.test_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
+        # Botão para parar alarme (menor)
         self.stop_alarm_btn = tk.Button(
             self.button_frame,
-            text="Parar Alarme",
-            font=("Helvetica", 16, "bold"),
+            text="Parar",
+            font=SCREEN_CONFIG["font_buttons"],
             bg=self.colors["danger"],
             fg="white",
             relief="flat",
-            padx=20,
-            pady=10,
+            padx=15,
+            pady=SCREEN_CONFIG["button_pady"],
             command=self.stop_alarm,
             cursor="hand2",
         )
-        self.stop_alarm_btn.pack(side="left", padx=20, pady=5)
+        self.stop_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
+        # Indicador de status (menor)
         self.status_indicator = tk.Canvas(
-            self.button_frame, width=30, height=30, bg=self.colors["background"], highlightthickness=0
+            self.button_frame, width=24, height=24, bg=self.colors["background"], highlightthickness=0
         )
-        self.status_indicator.pack(side="right", padx=20)
-        self.indicator = self.status_indicator.create_oval(5, 5, 25, 25, fill=self.colors["success"], outline="")
+        self.status_indicator.pack(side="right", padx=15)
+        self.indicator = self.status_indicator.create_oval(3, 3, 21, 21, fill=self.colors["success"], outline="")
 
+        # Thread de checagem de alarmes
         self.running = True
         self.alarm_thread = threading.Thread(target=self.check_alarms, daemon=True)
         self.alarm_thread.start()
@@ -467,9 +513,10 @@ class AlarmClockApp:
         if next_alarm:
             days_map = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
             days_str = ", ".join([days_map[d] for d in next_alarm["days"]])
-            self.next_alarm_label.config(text=f"Próximo: {next_alarm['time']} ({days_str}) - {next_alarm['label']}")
+            # Texto mais curto para caber na tela
+            self.next_alarm_label.config(text=f"Próx: {next_alarm['time']} - {next_alarm['label'][:15]}{'...' if len(next_alarm['label']) > 15 else ''}")
         else:
-            self.next_alarm_label.config(text="Nenhum alarme programado")
+            self.next_alarm_label.config(text="Sem alarmes")
 
     def get_next_alarm(self):
         now = datetime.now()
@@ -517,8 +564,6 @@ class AlarmClockApp:
         self.brightness = cfg.get("brightness", 180)
         self.auto_dim = cfg.get("auto_dim", {})
 
-        Backlight.set(self.brightness)
-
     def save_config(self):
         cfg = {
             "alarms": self.alarms,
@@ -532,8 +577,9 @@ class AlarmClockApp:
     def update_clock(self):
         now = datetime.now()
         time_str = now.strftime("%H:%M:%S")
-        date_str = now.strftime("%A, %d %B %Y").title()
+        date_str = now.strftime("%d/%m/%Y - %A")  # Formato mais compacto
 
+        # Efeito de piscar os dois pontos
         if int(now.second) % 2 == 0:
             time_str = time_str.replace(":", " ")
         else:
@@ -558,17 +604,17 @@ class AlarmClockApp:
     def trigger_alarm(self, alarm):
         volume = alarm.get("volume", 70)
         AudioPlayer.play(volume)
-        self.status_label.config(text=f"Alarme: {alarm['label']}")
+        self.status_label.config(text=f"ALARME: {alarm.get('label', '')}", fg=self.colors["danger"])
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["danger"])
 
     def stop_alarm(self):
         AudioPlayer.stop()
-        self.status_label.config(text="Nenhum alarme ativo")
+        self.status_label.config(text="Nenhum alarme ativo", fg=self.colors["text_secondary"])
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["success"])
 
     def test_alarm(self):
         AudioPlayer.play(70)
-        self.status_label.config(text="🔔 Testando alarme")
+        self.status_label.config(text="🔔 Testando alarme", fg=self.colors["warning"])
         self.status_indicator.itemconfig(self.indicator, fill=self.colors["warning"])
         self.root.after(5000, self.stop_alarm)
 
@@ -581,51 +627,19 @@ class AlarmClockApp:
 
     def on_close(self):
         self.running = False
-        self.buttons.cleanup()
+        if hasattr(self.buttons, 'cleanup'):
+            self.buttons.cleanup()
         self.root.destroy()
 
 
-class AudioPlayer:
-    buzzer_pin = 23
-    _is_playing = False
-
-    @staticmethod
-    def setup():
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        GPIO.setup(AudioPlayer.buzzer_pin, GPIO.OUT)
-        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-
-    @staticmethod
-    def play(volume=70):
-        if AudioPlayer._is_playing:
-            return
-        AudioPlayer._is_playing = True
-        threading.Thread(target=AudioPlayer._buzz, daemon=True).start()
-
-    @staticmethod
-    def stop():
-        AudioPlayer._is_playing = False
-        GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-
-    @staticmethod
-    def is_playing():
-        return AudioPlayer._is_playing
-
-    @staticmethod
-    def _buzz():
-        while AudioPlayer._is_playing:
-            GPIO.output(AudioPlayer.buzzer_pin, GPIO.HIGH)
-            time.sleep(0.2)
-            GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
-            time.sleep(0.2)
-
-
 def main():
-    AudioPlayer.setup()
     root = tk.Tk()
     app = AlarmClockApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
+    
+    # Configurar para fechar com a tecla ESC
+    root.bind('<Escape>', lambda e: app.on_close())
+    
     root.mainloop()
 
 
