@@ -35,7 +35,6 @@ from datetime import datetime, date
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-
 # ====== CONFIGURAÇÕES ======
 FULLSCREEN = False              # True = tela cheia
 ALARM_FILE = "alarms.json"      # onde os alarmes ficam salvos
@@ -361,6 +360,7 @@ class PiClockApp(tk.Tk):
         main: MainScreen = self.frames.get("MainScreen")  # type: ignore
         if main:
             main.set_alarm_state(True)
+            main.update_test_btn()
 
     def stop_alarm(self):
         if self.audio.is_playing():
@@ -368,6 +368,7 @@ class PiClockApp(tk.Tk):
         main: MainScreen = self.frames.get("MainScreen")  # type: ignore
         if main:
             main.set_alarm_state(False)
+            main.update_test_btn()
 
 # ====== Telas ======
 class MainScreen(ttk.Frame):
@@ -417,18 +418,21 @@ class MainScreen(ttk.Frame):
         # Botões de ação
         actions = ttk.Frame(self, style="Main.TFrame")
         actions.grid(row=2, column=0, pady=8)
-        for i in range(3):
+        for i in range(4):
             actions.columnconfigure(i, weight=1)
 
         self.new_alarm_btn = ttk.Button(actions, text="Novo alarme", style="Action.TButton",
                                         command=lambda: self.controller.show_frame("NewAlarmScreen"))
         self.list_alarms_btn = ttk.Button(actions, text="Alarmes", style="Action.TButton",
                                           command=lambda: self.controller.show_frame("ListAlarmsScreen"))
+        self.test_btn = ttk.Button(actions, text="Testar alarme", style="Action.TButton",
+                                         command=self._toggle_test)
         self.stop_alarm_btn = ttk.Button(actions, text="Parar alarme", style="Action.TButton",
                                          command=self.controller.stop_alarm, state="disabled")
         self.new_alarm_btn.grid(row=0, column=0, padx=8)
         self.list_alarms_btn.grid(row=0, column=1, padx=8)
-        self.stop_alarm_btn.grid(row=0, column=2, padx=8)
+        self.test_btn.grid(row=0, column=2, padx=8)
+        self.stop_alarm_btn.grid(row=0, column=3, padx=8)
 
         self.on_scale_change()
         self.update_clock()
@@ -449,6 +453,18 @@ class MainScreen(ttk.Frame):
         # Atualiza info ao voltar
         self.update_clock()
         self.update_weather()
+        self.update_test_btn()
+
+    def update_test_btn(self):
+        txt = "Parar teste" if self.controller.audio.is_playing() else "Testar alarme"
+        self.test_btn.configure(text=txt)
+
+    def _toggle_test(self):
+        if self.controller.audio.is_playing():
+            self.controller.audio.stop()
+        else:
+            self.controller.audio.play()
+        self.update_test_btn()
 
     def set_alarm_state(self, active: bool):
         self.stop_alarm_btn.configure(state=("normal" if active else "disabled"))
