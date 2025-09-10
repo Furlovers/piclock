@@ -63,7 +63,6 @@ class WeatherService:
     @staticmethod
     def get_weather():
         # Simulação de dados meteorológicos
-        # Em uma implementação real, você conectaria a uma API de previsão do tempo
         temperatures = [22, 23, 24, 25, 26, 27, 28, 29, 30]
         conditions = ["sunny", "partly_cloudy", "cloudy", "rainy"]
         weather_icons = {
@@ -98,22 +97,55 @@ class AlarmDialog:
         screen_width = self.dialog.winfo_screenwidth()
         screen_height = self.dialog.winfo_screenheight()
         
-        # Configurar para ocupar quase toda a tela, mas deixar uma pequena margem
+        # Configurar para ocupar toda a tela
         self.dialog.geometry(f"{screen_width}x{screen_height}+0+0")
         self.dialog.attributes('-fullscreen', True)
         self.dialog.configure(bg="#0a0a0a")
-        self.dialog.grab_set()  # Tornar modal
+        self.dialog.grab_set()
 
         # Configuração de estilo
         self.colors = parent.colors
         self.screen_width = screen_width
         self.screen_height = screen_height
 
+        # Criar frame principal com scrollbar
+        self.main_frame = tk.Frame(self.dialog, bg=self.colors["background"])
+        self.main_frame.pack(fill="both", expand=True)
+        
+        # Canvas e scrollbar
+        self.canvas = tk.Canvas(self.main_frame, bg=self.colors["background"], highlightthickness=0)
+        self.scrollbar = tk.Scrollbar(self.main_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=self.colors["background"])
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        # Configurar scroll com mouse
+        self.canvas.bind("<Enter>", self._bind_mouse)
+        self.canvas.bind("<Leave>", self._unbind_mouse)
+
         self.create_widgets()
         self.load_alarm_data()
         
-        # Adicionar botão de voltar no canto superior esquerdo
+        # Adicionar botão de voltar
         self.add_back_button()
+
+    def _bind_mouse(self, event):
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        
+    def _unbind_mouse(self, event):
+        self.canvas.unbind_all("<MouseWheel>")
+        
+    def _on_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def add_back_button(self):
         back_btn = tk.Button(
@@ -132,20 +164,19 @@ class AlarmDialog:
 
     def create_widgets(self):
         # Frame principal centralizado
-        main_frame = tk.Frame(
-            self.dialog, 
+        content_frame = tk.Frame(
+            self.scrollable_frame, 
             bg=self.colors["background"], 
             padx=30, 
             pady=30,
             width=self.screen_width * 0.8,
-            height=self.screen_height * 0.8
         )
-        main_frame.place(relx=0.5, rely=0.5, anchor="center")
-        main_frame.pack_propagate(False)  # Impede que o frame redimensione seus filhos
+        content_frame.pack(expand=True, fill="both")
+        content_frame.pack_propagate(False)
 
         # Título
         title = tk.Label(
-            main_frame,
+            content_frame,
             text="Adicionar Alarme" if not self.is_edit else "Editar Alarme",
             font=("Helvetica", 24, "bold"),
             fg=self.colors["primary"],
@@ -153,8 +184,8 @@ class AlarmDialog:
         )
         title.pack(pady=(0, 30))
 
-        # Frame para formulário com scrollbar se necessário
-        form_frame = tk.Frame(main_frame, bg=self.colors["background"])
+        # Frame para formulário
+        form_frame = tk.Frame(content_frame, bg=self.colors["background"])
         form_frame.pack(fill="both", expand=True)
 
         # Descrição do alarme
@@ -308,7 +339,7 @@ class AlarmDialog:
 
         # Botões na parte inferior
         button_frame = tk.Frame(form_frame, bg=self.colors["background"])
-        button_frame.pack(fill="x", pady=(20, 0))
+        button_frame.pack(fill="x", pady=(20, 30))
 
         if self.is_edit:
             delete_btn = tk.Button(
@@ -375,7 +406,7 @@ class AlarmDialog:
 
         try:
             hour = int(self.hour_var.get())
-            minute = int(self.minute_var.get())
+            minute =极速赛车开奖直播历史记录
             if hour < 0 or hour > 23 or minute < 0 or minute > 59:
                 raise ValueError
         except ValueError:
@@ -435,10 +466,11 @@ class AlarmListDialog:
         self.screen_width = screen_width
         self.screen_height = screen_height
 
-        self.create_widgets()
-        
         # Adicionar botão de voltar
         self.add_back_button()
+        
+        # Criar frame principal com scroll
+        self.create_scrollable_frame()
 
     def add_back_button(self):
         back_btn = tk.Button(
@@ -455,7 +487,7 @@ class AlarmListDialog:
         )
         back_btn.place(x=20, y=20)
 
-    def create_widgets(self):
+    def create_scrollable_frame(self):
         # Título
         title = tk.Label(
             self.dialog,
@@ -466,42 +498,58 @@ class AlarmListDialog:
         )
         title.pack(pady=(60, 20))
 
-        # Frame para a lista de alarmes
-        list_frame = tk.Frame(self.dialog, bg=self.colors["background"])
-        list_frame.pack(fill="both", expand=True, padx=30, pady=10)
+        # Frame principal com canvas e scrollbar
+        main_frame = tk.Frame(self.dialog, bg=self.colors["background"])
+        main_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Canvas e scrollbar
+        canvas = tk.Canvas(main_frame, bg=self.colors["background"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=self.colors["background"])
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Configurar scroll com mouse
+        canvas.bind("<Enter>", lambda e: self._bind_mouse(e, canvas))
+        canvas.bind("<Leave>", lambda e: self._unbind_mouse(e, canvas))
 
         # Cabeçalho
-        header_frame = tk.Frame(list_frame, bg=self.colors["background"])
+        header_frame = tk.Frame(scrollable_frame, bg=self.colors["background"])
         header_frame.pack(fill="x", pady=(0, 10))
         
         headers = ["Hora", "Descrição", "Dias", "Status", "Ações"]
-        for i, header in enumerate(headers):
+        column_widths = [8, 20, 15, 8, 15]
+        
+        for i, (header, width) in enumerate(zip(headers, column_widths)):
             tk.Label(
                 header_frame,
                 text=header,
                 font=("Helvetica", 14, "bold"),
                 fg=self.colors["primary"],
                 bg=self.colors["background"],
-            ).grid(row=0, column=i, padx=5, sticky="w")
-
-        # Canvas e Scrollbar para a lista
-        canvas = tk.Canvas(list_frame, bg=self.colors["background"], highlightthickness=0)
-        scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.colors["background"])
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+                width=width
+            ).grid(row=0, column=i, padx=2, sticky="w")
 
         # Preencher com a lista de alarmes
         self.populate_alarm_list(scrollable_frame)
+
+    def _bind_mouse(self, event, canvas):
+        canvas.bind_all("<MouseWheel>", lambda e: self._on_mousewheel(e, canvas))
+        
+    def _unbind_mouse(self, event, canvas):
+        canvas.unbind_all("<MouseWheel>")
+        
+    def _on_mousewheel(self, event, canvas):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def populate_alarm_list(self, parent_frame):
         days_map = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
@@ -518,7 +566,7 @@ class AlarmListDialog:
                 fg=self.colors["text"],
                 bg=self.colors["background"],
                 width=8
-            ).grid(row=0, column=0, padx=5, sticky="w")
+            ).grid(row=0, column=0, padx=2, sticky="w")
             
             # Descrição
             tk.Label(
@@ -528,7 +576,7 @@ class AlarmListDialog:
                 fg=self.colors["text"],
                 bg=self.colors["background"],
                 width=20
-            ).grid(row=0, column=1, padx=5, sticky="w")
+            ).grid(row=0, column=1, padx=2, sticky="w")
             
             # Dias
             days_str = ",".join([days_map[d] for d in alarm.get("days", [])])
@@ -539,7 +587,7 @@ class AlarmListDialog:
                 fg=self.colors["text_secondary"],
                 bg=self.colors["background"],
                 width=15
-            ).grid(row=0, column=2, padx=5, sticky="w")
+            ).grid(row=0, column=2, padx=2, sticky="w")
             
             # Status
             status_text = "Ativo" if alarm.get("enabled", False) else "Inativo"
@@ -551,22 +599,23 @@ class AlarmListDialog:
                 fg=status_color,
                 bg=self.colors["background"],
                 width=8
-            ).grid(row=0, column=3, padx=5, sticky="w")
+            ).grid(row=0, column=3, padx=2, sticky="w")
             
             # Ações
             action_frame = tk.Frame(row_frame, bg=self.colors["background"])
-            action_frame.grid(row=0, column=4, padx=5, sticky="w")
+            action_frame.grid(row=0, column=4, padx=2, sticky="w")
             
             # Botão editar
             edit_btn = tk.Button(
                 action_frame,
                 text="✏️",
-                font=("Helvetica", 12),
+                font=("Helvetica", 14),
                 bg=self.colors["primary"],
                 fg="white",
                 relief="flat",
                 command=lambda idx=i: self.edit_alarm(idx),
                 cursor="hand2",
+                width=3
             )
             edit_btn.pack(side="left", padx=2)
             
@@ -575,12 +624,13 @@ class AlarmListDialog:
             toggle_btn = tk.Button(
                 action_frame,
                 text=toggle_text,
-                font=("Helvetica", 12),
+                font=("Helvetica", 14),
                 bg=self.colors["warning"],
                 fg="white",
                 relief="flat",
                 command=lambda idx=i: self.toggle_alarm(idx),
                 cursor="hand2",
+                width=3
             )
             toggle_btn.pack(side="left", padx=2)
             
@@ -588,12 +638,13 @@ class AlarmListDialog:
             delete_btn = tk.Button(
                 action_frame,
                 text="🗑️",
-                font=("Helvetica", 12),
+                font=("Helvetica", 14),
                 bg=self.colors["danger"],
                 fg="white",
                 relief="flat",
                 command=lambda idx=i: self.delete_alarm(idx),
                 cursor="hand2",
+                width=3
             )
             delete_btn.pack(side="left", padx=2)
 
@@ -605,13 +656,13 @@ class AlarmListDialog:
         self.parent.alarms[index]["enabled"] = not self.parent.alarms[index]["enabled"]
         self.parent.save_config()
         self.dialog.destroy()
-        AlarmListDialog(self.parent)  # Recria a janela para atualizar
+        AlarmListDialog(self.parent)
 
     def delete_alarm(self, index):
         if messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir este alarme?"):
             self.parent.delete_alarm(index)
             self.dialog.destroy()
-            AlarmListDialog(self.parent)  # Recria a janela para atualizar
+            AlarmListDialog(self.parent)
 
 
 class AlarmClockApp:
@@ -636,7 +687,7 @@ class AlarmClockApp:
         # Inicializar player de áudio
         AudioPlayer.setup()
 
-        # Simular botões GPIO (substitua pela sua implementação real)
+        # Simular botões GPIO
         self.buttons = type('Obj', (object,), {'start': lambda: None, 'cleanup': lambda: None})()
         
         self.alarms = []
@@ -645,7 +696,7 @@ class AlarmClockApp:
         # Inicializar dados meteorológicos
         self.weather_data = WeatherService.get_weather()
         
-        # Layout principal otimizado para tela pequena
+        # Layout principal
         self.main_frame = tk.Frame(root, bg=self.colors["background"])
         self.main_frame.pack(expand=True, fill="both", pady=SCREEN_CONFIG["main_pady"])
 
@@ -697,16 +748,16 @@ class AlarmClockApp:
         self.button_frame = tk.Frame(root, bg=self.colors["background"])
         self.button_frame.pack(side="bottom", fill="x", pady=10)
 
-        # Botão para lista de alarmes
+        # Botão para lista de alarmes (com emoji)
         self.list_alarm_btn = tk.Button(
             self.button_frame,
-            text="📋",
-            font=("Helvetica", 16, "bold"),
+            text="📋 Lista",
+            font=SCREEN_CONFIG["font_buttons"],
             bg=self.colors["secondary"],
             fg="white",
             relief="flat",
-            width=2,
-            height=1,
+            padx=15,
+            pady=SCREEN_CONFIG["button_pady"],
             command=self.show_alarm_list,
             cursor="hand2",
         )
@@ -814,7 +865,7 @@ class AlarmClockApp:
 
     def update_weather(self):
         # Atualizar dados meteorológicos a cada 30 minutos
-        if int(datetime.now().strftime("%M")) % 30 == 0:  # A cada 30 minutos
+        if int(datetime.now().strftime("%M")) % 30 == 0:
             self.weather_data = WeatherService.get_weather()
             
             self.weather_icon.config(text=self.weather_data["icon"])
@@ -828,7 +879,7 @@ class AlarmClockApp:
             }
             self.weather_desc.config(text=weather_desc[self.weather_data["condition"]])
         
-        self.root.after(60000, self.update_weather)  # Verificar a cada minuto
+        self.root.after(60000, self.update_weather)
 
     def show_alarm_list(self):
         AlarmListDialog(self)
@@ -921,7 +972,7 @@ class AlarmClockApp:
     def update_clock(self):
         now = datetime.now()
         time_str = now.strftime("%H:%M:%S")
-        date_str = now.strftime("%d/%m/%Y - %A")  # Formato mais compacto
+        date_str = now.strftime("%d/%m/%Y - %A")
 
         # Efeito de piscar os dois pontos
         if int(now.second) % 2 == 0:
