@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import json
 import threading
 import time
+import random
 from datetime import datetime
 from pathlib import Path
 import RPi.GPIO as GPIO
@@ -16,6 +17,7 @@ SCREEN_CONFIG = {
     "font_status": ("Helvetica", 18),
     "font_next_alarm": ("Helvetica", 12),
     "font_buttons": ("Helvetica", 12, "bold"),
+    "font_temp": ("Helvetica", 14),
     "button_padx": 10,
     "button_pady": 6,
     "main_pady": 10
@@ -55,6 +57,30 @@ class AudioPlayer:
             time.sleep(0.2)
             GPIO.output(AudioPlayer.buzzer_pin, GPIO.LOW)
             time.sleep(0.2)
+
+
+class WeatherService:
+    @staticmethod
+    def get_weather():
+        # Simulação de dados meteorológicos
+        # Em uma implementação real, você conectaria a uma API de previsão do tempo
+        temperatures = [22, 23, 24, 25, 26, 27, 28, 29, 30]
+        conditions = ["sunny", "partly_cloudy", "cloudy", "rainy"]
+        weather_icons = {
+            "sunny": "☀️",
+            "partly_cloudy": "⛅",
+            "cloudy": "☁️",
+            "rainy": "🌧️"
+        }
+        
+        temp = random.choice(temperatures)
+        condition = random.choice(conditions)
+        
+        return {
+            "temperature": temp,
+            "condition": condition,
+            "icon": weather_icons[condition]
+        }
 
 
 class AlarmDialog:
@@ -386,6 +412,208 @@ class AlarmDialog:
             self.dialog.destroy()
 
 
+class AlarmListDialog:
+    def __init__(self, parent):
+        self.parent = parent
+        
+        # Criar janela de diálogo em full screen
+        self.dialog = tk.Toplevel(parent.root)
+        self.dialog.title("Lista de Alarmes")
+        
+        # Obter dimensões da tela
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+        
+        # Configurar para ocupar toda a tela
+        self.dialog.geometry(f"{screen_width}x{screen_height}+0+0")
+        self.dialog.attributes('-fullscreen', True)
+        self.dialog.configure(bg="#0a0a0a")
+        self.dialog.grab_set()
+
+        # Configuração de estilo
+        self.colors = parent.colors
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+
+        self.create_widgets()
+        
+        # Adicionar botão de voltar
+        self.add_back_button()
+
+    def add_back_button(self):
+        back_btn = tk.Button(
+            self.dialog,
+            text="← Voltar",
+            font=("Helvetica", 14, "bold"),
+            bg=self.colors["secondary"],
+            fg="white",
+            relief="flat",
+            padx=15,
+            pady=8,
+            command=self.dialog.destroy,
+            cursor="hand2",
+        )
+        back_btn.place(x=20, y=20)
+
+    def create_widgets(self):
+        # Título
+        title = tk.Label(
+            self.dialog,
+            text="Lista de Alarmes",
+            font=("Helvetica", 24, "bold"),
+            fg=self.colors["primary"],
+            bg=self.colors["background"],
+        )
+        title.pack(pady=(60, 20))
+
+        # Frame para a lista de alarmes
+        list_frame = tk.Frame(self.dialog, bg=self.colors["background"])
+        list_frame.pack(fill="both", expand=True, padx=30, pady=10)
+
+        # Cabeçalho
+        header_frame = tk.Frame(list_frame, bg=self.colors["background"])
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        headers = ["Hora", "Descrição", "Dias", "Status", "Ações"]
+        for i, header in enumerate(headers):
+            tk.Label(
+                header_frame,
+                text=header,
+                font=("Helvetica", 14, "bold"),
+                fg=self.colors["primary"],
+                bg=self.colors["background"],
+            ).grid(row=0, column=i, padx=5, sticky="w")
+
+        # Canvas e Scrollbar para a lista
+        canvas = tk.Canvas(list_frame, bg=self.colors["background"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=self.colors["background"])
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Preencher com a lista de alarmes
+        self.populate_alarm_list(scrollable_frame)
+
+    def populate_alarm_list(self, parent_frame):
+        days_map = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+        
+        for i, alarm in enumerate(self.parent.alarms):
+            row_frame = tk.Frame(parent_frame, bg=self.colors["background"])
+            row_frame.pack(fill="x", pady=5)
+            
+            # Hora
+            tk.Label(
+                row_frame,
+                text=alarm["time"],
+                font=("Helvetica", 14),
+                fg=self.colors["text"],
+                bg=self.colors["background"],
+                width=8
+            ).grid(row=0, column=0, padx=5, sticky="w")
+            
+            # Descrição
+            tk.Label(
+                row_frame,
+                text=alarm.get("label", "Alarme"),
+                font=("Helvetica", 14),
+                fg=self.colors["text"],
+                bg=self.colors["background"],
+                width=20
+            ).grid(row=0, column=1, padx=5, sticky="w")
+            
+            # Dias
+            days_str = ",".join([days_map[d] for d in alarm.get("days", [])])
+            tk.Label(
+                row_frame,
+                text=days_str,
+                font=("Helvetica", 12),
+                fg=self.colors["text_secondary"],
+                bg=self.colors["background"],
+                width=15
+            ).grid(row=0, column=2, padx=5, sticky="w")
+            
+            # Status
+            status_text = "Ativo" if alarm.get("enabled", False) else "Inativo"
+            status_color = self.colors["success"] if alarm.get("enabled", False) else self.colors["danger"]
+            tk.Label(
+                row_frame,
+                text=status_text,
+                font=("Helvetica", 12),
+                fg=status_color,
+                bg=self.colors["background"],
+                width=8
+            ).grid(row=0, column=3, padx=5, sticky="w")
+            
+            # Ações
+            action_frame = tk.Frame(row_frame, bg=self.colors["background"])
+            action_frame.grid(row=0, column=4, padx=5, sticky="w")
+            
+            # Botão editar
+            edit_btn = tk.Button(
+                action_frame,
+                text="✏️",
+                font=("Helvetica", 12),
+                bg=self.colors["primary"],
+                fg="white",
+                relief="flat",
+                command=lambda idx=i: self.edit_alarm(idx),
+                cursor="hand2",
+            )
+            edit_btn.pack(side="left", padx=2)
+            
+            # Botão toggle status
+            toggle_text = "⏸️" if alarm.get("enabled", False) else "▶️"
+            toggle_btn = tk.Button(
+                action_frame,
+                text=toggle_text,
+                font=("Helvetica", 12),
+                bg=self.colors["warning"],
+                fg="white",
+                relief="flat",
+                command=lambda idx=i: self.toggle_alarm(idx),
+                cursor="hand2",
+            )
+            toggle_btn.pack(side="left", padx=2)
+            
+            # Botão excluir
+            delete_btn = tk.Button(
+                action_frame,
+                text="🗑️",
+                font=("Helvetica", 12),
+                bg=self.colors["danger"],
+                fg="white",
+                relief="flat",
+                command=lambda idx=i: self.delete_alarm(idx),
+                cursor="hand2",
+            )
+            delete_btn.pack(side="left", padx=2)
+
+    def edit_alarm(self, index):
+        self.dialog.destroy()
+        self.parent.show_alarm_dialog(self.parent.alarms[index], index)
+
+    def toggle_alarm(self, index):
+        self.parent.alarms[index]["enabled"] = not self.parent.alarms[index]["enabled"]
+        self.parent.save_config()
+        self.dialog.destroy()
+        AlarmListDialog(self.parent)  # Recria a janela para atualizar
+
+    def delete_alarm(self, index):
+        if messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir este alarme?"):
+            self.parent.delete_alarm(index)
+            self.dialog.destroy()
+            AlarmListDialog(self.parent)  # Recria a janela para atualizar
+
+
 class AlarmClockApp:
     def __init__(self, root):
         self.root = root
@@ -414,11 +642,17 @@ class AlarmClockApp:
         self.alarms = []
         self.load_config()
 
+        # Inicializar dados meteorológicos
+        self.weather_data = WeatherService.get_weather()
+        
         # Layout principal otimizado para tela pequena
         self.main_frame = tk.Frame(root, bg=self.colors["background"])
         self.main_frame.pack(expand=True, fill="both", pady=SCREEN_CONFIG["main_pady"])
 
-        # Data atual (menor)
+        # Barra superior com informações meteorológicas
+        self.create_weather_bar()
+
+        # Data atual
         self.date_label = tk.Label(
             self.main_frame,
             text="",
@@ -426,9 +660,9 @@ class AlarmClockApp:
             fg=self.colors["text_secondary"],
             bg=self.colors["background"],
         )
-        self.date_label.pack(pady=(20, 5))
+        self.date_label.pack(pady=(10, 5))
 
-        # Hora (tamanho reduzido)
+        # Hora
         self.time_label = tk.Label(
             self.main_frame,
             text="",
@@ -448,7 +682,7 @@ class AlarmClockApp:
         )
         self.status_label.pack(pady=8)
 
-        # Próximo alarme (menor)
+        # Próximo alarme
         self.next_alarm_label = tk.Label(
             self.main_frame,
             text="",
@@ -459,11 +693,26 @@ class AlarmClockApp:
         self.next_alarm_label.pack(pady=5)
         self.update_next_alarm()
 
-        # Frame dos botões (mais compacto)
+        # Frame dos botões
         self.button_frame = tk.Frame(root, bg=self.colors["background"])
         self.button_frame.pack(side="bottom", fill="x", pady=10)
 
-        # Botão para adicionar alarme (menor)
+        # Botão para lista de alarmes
+        self.list_alarm_btn = tk.Button(
+            self.button_frame,
+            text="📋",
+            font=("Helvetica", 16, "bold"),
+            bg=self.colors["secondary"],
+            fg="white",
+            relief="flat",
+            width=2,
+            height=1,
+            command=self.show_alarm_list,
+            cursor="hand2",
+        )
+        self.list_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
+
+        # Botão para adicionar alarme
         self.add_alarm_btn = tk.Button(
             self.button_frame,
             text="+",
@@ -478,7 +727,7 @@ class AlarmClockApp:
         )
         self.add_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
-        # Botão para testar alarme (menor)
+        # Botão para testar alarme
         self.test_alarm_btn = tk.Button(
             self.button_frame,
             text="Testar",
@@ -493,7 +742,7 @@ class AlarmClockApp:
         )
         self.test_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
-        # Botão para parar alarme (menor)
+        # Botão para parar alarme
         self.stop_alarm_btn = tk.Button(
             self.button_frame,
             text="Parar",
@@ -508,7 +757,7 @@ class AlarmClockApp:
         )
         self.stop_alarm_btn.pack(side="left", padx=SCREEN_CONFIG["button_padx"], pady=SCREEN_CONFIG["button_pady"])
 
-        # Indicador de status (menor)
+        # Indicador de status
         self.status_indicator = tk.Canvas(
             self.button_frame, width=24, height=24, bg=self.colors["background"], highlightthickness=0
         )
@@ -520,7 +769,69 @@ class AlarmClockApp:
         self.alarm_thread = threading.Thread(target=self.check_alarms, daemon=True)
         self.alarm_thread.start()
 
+        # Atualizar relógio e temperatura periodicamente
         self.update_clock()
+        self.update_weather()
+
+    def create_weather_bar(self):
+        weather_frame = tk.Frame(self.main_frame, bg=self.colors["background"])
+        weather_frame.pack(fill="x", pady=(5, 10))
+        
+        self.weather_icon = tk.Label(
+            weather_frame,
+            text=self.weather_data["icon"],
+            font=("Helvetica", 20),
+            fg=self.colors["primary"],
+            bg=self.colors["background"],
+        )
+        self.weather_icon.pack(side="left", padx=(20, 5))
+        
+        self.temp_label = tk.Label(
+            weather_frame,
+            text=f"{self.weather_data['temperature']}°C",
+            font=SCREEN_CONFIG["font_temp"],
+            fg=self.colors["text"],
+            bg=self.colors["background"],
+        )
+        self.temp_label.pack(side="left", padx=(0, 20))
+        
+        # Previsão simples
+        weather_desc = {
+            "sunny": "Ensolarado",
+            "partly_cloudy": "Parc. Nublado",
+            "cloudy": "Nublado",
+            "rainy": "Chuvoso"
+        }
+        
+        self.weather_desc = tk.Label(
+            weather_frame,
+            text=weather_desc[self.weather_data["condition"]],
+            font=SCREEN_CONFIG["font_temp"],
+            fg=self.colors["text_secondary"],
+            bg=self.colors["background"],
+        )
+        self.weather_desc.pack(side="right", padx=(0, 20))
+
+    def update_weather(self):
+        # Atualizar dados meteorológicos a cada 30 minutos
+        if int(datetime.now().strftime("%M")) % 30 == 0:  # A cada 30 minutos
+            self.weather_data = WeatherService.get_weather()
+            
+            self.weather_icon.config(text=self.weather_data["icon"])
+            self.temp_label.config(text=f"{self.weather_data['temperature']}°C")
+            
+            weather_desc = {
+                "sunny": "Ensolarado",
+                "partly_cloudy": "Parc. Nublado",
+                "cloudy": "Nublado",
+                "rainy": "Chuvoso"
+            }
+            self.weather_desc.config(text=weather_desc[self.weather_data["condition"]])
+        
+        self.root.after(60000, self.update_weather)  # Verificar a cada minuto
+
+    def show_alarm_list(self):
+        AlarmListDialog(self)
 
     def show_alarm_dialog(self, alarm=None, index=None):
         AlarmDialog(self, alarm, index)
@@ -547,7 +858,6 @@ class AlarmClockApp:
         if next_alarm:
             days_map = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
             days_str = ", ".join([days_map[d] for d in next_alarm["days"]])
-            # Texto mais curto para caber na tela
             self.next_alarm_label.config(text=f"Próx: {next_alarm['time']} - {next_alarm['label'][:15]}{'...' if len(next_alarm['label']) > 15 else ''}")
         else:
             self.next_alarm_label.config(text="Sem alarmes")
