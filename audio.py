@@ -30,6 +30,9 @@ class AudioPlayer:
             self.thread.join(timeout=0.1)
         self.buzzer.off()
 
+    def is_playing(self):  # <-- Adicionado
+        return self.playing
+
     @staticmethod
     def set_volume(percent: int):
         # Não aplicável para buzzer direto
