@@ -64,74 +64,105 @@ class AlarmDialog:
         self.index = index
         self.is_edit = alarm is not None
 
-        # Criar janela de diálogo
+        # Criar janela de diálogo em full screen
         self.dialog = tk.Toplevel(parent.root)
         self.dialog.title("Adicionar Alarme" if not self.is_edit else "Editar Alarme")
-        self.dialog.geometry("360x480")  # Tamanho reduzido para tela menor
-        self.dialog.resizable(False, False)
+        
+        # Obter dimensões da tela
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+        
+        # Configurar para ocupar quase toda a tela, mas deixar uma pequena margem
+        self.dialog.geometry(f"{screen_width}x{screen_height}+0+0")
+        self.dialog.attributes('-fullscreen', True)
         self.dialog.configure(bg="#0a0a0a")
-        self.dialog.grab_set()
-
-        # Centralizar na tela
-        self.dialog.transient(parent.root)
-        self.dialog.update_idletasks()
-        x = parent.root.winfo_x() + (parent.root.winfo_width() - self.dialog.winfo_width()) // 2
-        y = parent.root.winfo_y() + (parent.root.winfo_height() - self.dialog.winfo_height()) // 2
-        self.dialog.geometry(f"+{x}+{y}")
+        self.dialog.grab_set()  # Tornar modal
 
         # Configuração de estilo
         self.colors = parent.colors
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
         self.create_widgets()
         self.load_alarm_data()
+        
+        # Adicionar botão de voltar no canto superior esquerdo
+        self.add_back_button()
+
+    def add_back_button(self):
+        back_btn = tk.Button(
+            self.dialog,
+            text="← Voltar",
+            font=("Helvetica", 14, "bold"),
+            bg=self.colors["secondary"],
+            fg="white",
+            relief="flat",
+            padx=15,
+            pady=8,
+            command=self.dialog.destroy,
+            cursor="hand2",
+        )
+        back_btn.place(x=20, y=20)
 
     def create_widgets(self):
-        # Frame principal
-        main_frame = tk.Frame(self.dialog, bg=self.colors["background"], padx=15, pady=15)
-        main_frame.pack(fill="both", expand=True)
+        # Frame principal centralizado
+        main_frame = tk.Frame(
+            self.dialog, 
+            bg=self.colors["background"], 
+            padx=30, 
+            pady=30,
+            width=self.screen_width * 0.8,
+            height=self.screen_height * 0.8
+        )
+        main_frame.place(relx=0.5, rely=0.5, anchor="center")
+        main_frame.pack_propagate(False)  # Impede que o frame redimensione seus filhos
 
         # Título
         title = tk.Label(
             main_frame,
             text="Adicionar Alarme" if not self.is_edit else "Editar Alarme",
-            font=("Helvetica", 16, "bold"),
+            font=("Helvetica", 24, "bold"),
             fg=self.colors["primary"],
             bg=self.colors["background"],
         )
-        title.pack(pady=(0, 15))
+        title.pack(pady=(0, 30))
+
+        # Frame para formulário com scrollbar se necessário
+        form_frame = tk.Frame(main_frame, bg=self.colors["background"])
+        form_frame.pack(fill="both", expand=True)
 
         # Descrição do alarme
         tk.Label(
-            main_frame,
+            form_frame,
             text="Descrição:",
-            font=("Helvetica", 11),
+            font=("Helvetica", 16),
             fg=self.colors["text"],
             bg=self.colors["background"],
-        ).pack(anchor="w", pady=(5, 0))
+        ).pack(anchor="w", pady=(10, 5))
 
         self.label_entry = tk.Entry(
-            main_frame,
-            font=("Helvetica", 12),
+            form_frame,
+            font=("Helvetica", 16),
             bg="#2d3436",
             fg=self.colors["text"],
             insertbackground="white",
         )
-        self.label_entry.pack(fill="x", pady=(5, 10))
+        self.label_entry.pack(fill="x", pady=(5, 15))
 
         # Hora do alarme
-        time_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        time_frame.pack(fill="x", pady=8)
+        time_frame = tk.Frame(form_frame, bg=self.colors["background"])
+        time_frame.pack(fill="x", pady=15)
 
         tk.Label(
             time_frame,
             text="Horário:",
-            font=("Helvetica", 11),
+            font=("Helvetica", 16),
             fg=self.colors["text"],
             bg=self.colors["background"],
         ).pack(anchor="w")
 
         time_input_frame = tk.Frame(time_frame, bg=self.colors["background"])
-        time_input_frame.pack(fill="x", pady=(5, 0))
+        time_input_frame.pack(fill="x", pady=(10, 0))
 
         # Hora
         self.hour_var = tk.StringVar(value="07")
@@ -142,17 +173,17 @@ class AlarmDialog:
             format="%02.0f",
             textvariable=self.hour_var,
             width=4,
-            font=("Helvetica", 12),
+            font=("Helvetica", 20),
             bg="#2d3436",
             fg=self.colors["text"],
             justify="center",
         )
-        hour_spinbox.pack(side="left", padx=(0, 5))
+        hour_spinbox.pack(side="left", padx=(0, 10))
 
         tk.Label(
             time_input_frame,
             text=":",
-            font=("Helvetica", 12),
+            font=("Helvetica", 20),
             fg=self.colors["text"],
             bg=self.colors["background"],
         ).pack(side="left")
@@ -166,58 +197,59 @@ class AlarmDialog:
             format="%02.0f",
             textvariable=self.minute_var,
             width=4,
-            font=("Helvetica", 12),
+            font=("Helvetica", 20),
             bg="#2d3436",
             fg=self.colors["text"],
             justify="center",
         )
-        minute_spinbox.pack(side="left", padx=(5, 0))
+        minute_spinbox.pack(side="left", padx=(10, 0))
 
         # Dias da semana
         tk.Label(
-            main_frame,
+            form_frame,
             text="Repetir:",
-            font=("Helvetica", 11),
+            font=("Helvetica", 16),
             fg=self.colors["text"],
             bg=self.colors["background"],
-        ).pack(anchor="w", pady=(12, 5))
+        ).pack(anchor="w", pady=(20, 10))
 
-        days_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        days_frame.pack(fill="x", pady=(5, 10))
+        days_frame = tk.Frame(form_frame, bg=self.colors["background"])
+        days_frame.pack(fill="x", pady=(10, 15))
 
         self.days_vars = []
-        days = ["S", "T", "Q", "Q", "S", "S", "D"]  # Abreviado para caber na tela
+        days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
         for i, day in enumerate(days):
-            var = tk.BooleanVar(value=True if i < 5 else False)  # Seg-Sex marcados por padrão
+            var = tk.BooleanVar(value=True if i < 5 else False)
             self.days_vars.append(var)
 
             cb = tk.Checkbutton(
                 days_frame,
                 text=day,
                 variable=var,
-                font=("Helvetica", 10, "bold"),
+                font=("Helvetica", 14, "bold"),
                 fg=self.colors["text"],
                 bg=self.colors["background"],
                 selectcolor=self.colors["primary"],
                 activebackground=self.colors["background"],
                 activeforeground=self.colors["text"],
-                width=2
+                width=6,
+                height=2
             )
-            cb.grid(row=0, column=i, padx=2)
+            cb.grid(row=0, column=i, padx=5)
 
         # Volume
         tk.Label(
-            main_frame,
+            form_frame,
             text="Volume:",
-            font=("Helvetica", 11),
+            font=("Helvetica", 16),
             fg=self.colors["text"],
             bg=self.colors["background"],
-        ).pack(anchor="w", pady=(12, 5))
+        ).pack(anchor="w", pady=(20, 10))
 
         self.volume_var = tk.IntVar(value=70)
         volume_scale = tk.Scale(
-            main_frame,
+            form_frame,
             from_=0,
             to=100,
             orient="horizontal",
@@ -227,71 +259,73 @@ class AlarmDialog:
             troughcolor="#2d3436",
             highlightbackground=self.colors["background"],
             sliderrelief="flat",
-            length=250
+            length=400,
+            font=("Helvetica", 12),
+            sliderlength=30
         )
-        volume_scale.pack(fill="x", pady=(5, 10))
+        volume_scale.pack(fill="x", pady=(10, 20))
 
         # Ativo/Inativo
         self.enabled_var = tk.BooleanVar(value=True)
         enabled_cb = tk.Checkbutton(
-            main_frame,
+            form_frame,
             text="Ativo",
             variable=self.enabled_var,
-            font=("Helvetica", 11),
+            font=("Helvetica", 16),
             fg=self.colors["text"],
             bg=self.colors["background"],
             selectcolor=self.colors["primary"],
             activebackground=self.colors["background"],
             activeforeground=self.colors["text"],
         )
-        enabled_cb.pack(anchor="w", pady=(10, 15))
+        enabled_cb.pack(anchor="w", pady=(15, 20))
 
-        # Botões
-        button_frame = tk.Frame(main_frame, bg=self.colors["background"])
-        button_frame.pack(fill="x", pady=(10, 0))
+        # Botões na parte inferior
+        button_frame = tk.Frame(form_frame, bg=self.colors["background"])
+        button_frame.pack(fill="x", pady=(20, 0))
 
         if self.is_edit:
             delete_btn = tk.Button(
                 button_frame,
                 text="Excluir",
-                font=("Helvetica", 11, "bold"),
+                font=("Helvetica", 16, "bold"),
                 bg=self.colors["danger"],
                 fg="white",
                 relief="flat",
-                padx=12,
-                pady=6,
+                padx=20,
+                pady=12,
                 command=self.delete_alarm,
                 cursor="hand2",
             )
-            delete_btn.pack(side="left", padx=(0, 8))
+            delete_btn.pack(side="left", padx=(0, 15))
 
         cancel_btn = tk.Button(
             button_frame,
             text="Cancelar",
-            font=("Helvetica", 11, "bold"),
+            font=("Helvetica", 16, "bold"),
             bg="#636e72",
             fg="white",
             relief="flat",
-            padx=12,
-            pady=6,
+            padx=20,
+            pady=12,
             command=self.dialog.destroy,
             cursor="hand2",
         )
-        cancel_btn.pack(side="right", padx=(8, 0))
+        cancel_btn.pack(side="right", padx=(15, 0))
 
         save_btn = tk.Button(
             button_frame,
             text="Salvar",
-            font=("Helvetica", 11, "bold"),
+            font=("Helvetica", 16, "bold"),
             bg=self.colors["success"],
             fg="white",
             relief="flat",
-            padx=12,
-            pady=6,
+            padx=20,
+            pady=12,
             command=self.save_alarm,
             cursor="hand2",
         )
-        save_btn.pack(side="right", padx=(0, 8))
+        save_btn.pack(side="right", padx=(0, 15))
 
     def load_alarm_data(self):
         if self.alarm:
