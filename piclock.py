@@ -514,11 +514,15 @@ class MainScreen(ttk.Frame):
             self.weather_extra_lbl.configure(
                 text=f"Mín: {temp_min}°C / Máx: {temp_max}°C"
             )
-        # >>> Envia para Ubidots aqui
-        ubidots_send("temperature", w["temp"])
-        ubidots_send("temp_min", w["temp_min"])
-        ubidots_send("temp_max", w["temp_max"])
-        
+    
+            # >>> Envia para Ubidots apenas se os dados existem
+            if isinstance(temp, (int, float)):
+                ubidots_send("temperature", temp)
+            if isinstance(temp_min, (int, float)):
+                ubidots_send("temp_min", temp_min)
+            if isinstance(temp_max, (int, float)):
+                ubidots_send("temp_max", temp_max)
+
 # ====== Nova tela: criação de alarmes ======
 class NewAlarmScreen(ttk.Frame):
     def __init__(self, parent, controller: PiClockApp):
