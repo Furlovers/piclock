@@ -20,7 +20,7 @@ REFRESH_CLOCK_MS = 1000
 REFRESH_WEATHER_MS = 10 * 60 * 1000
 CHECK_ALARMS_MS = 1000
 
-OWM_API_KEY = "8a103abae898463aac1274b5bcef0194"   # <<-- substitua pela sua chave
+OWM_API_KEY = os.environ.get("OWM_API_KEY", "")
 CITY = "São Paulo"
 COUNTRY_CODE = "BR"
 
