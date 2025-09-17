@@ -20,7 +20,7 @@ REFRESH_CLOCK_MS = 1000
 REFRESH_WEATHER_MS = 10 * 60 * 1000
 CHECK_ALARMS_MS = 1000
 
-OWM_API_KEY = "f5895eb5d001735b733eca0e3c7aa6a7"   # <<-- substitua pela sua chave
+OWM_API_KEY = "8a103abae898463aac1274b5bcef0194"   # <<-- substitua pela sua chave
 CITY = "São Paulo"
 COUNTRY_CODE = "BR"
 
@@ -91,7 +91,7 @@ def fetch_weather(city: str, country: str, api_key: str):
         return {"temp": "—", "descr": "Sem API Key", "icon": "🌡️", "temp_min": "—", "temp_max": "—"}
 
     url = (
-        f"http://api.openweathermap.org/data/2.5/weather?"
+        f"https://api.openweathermap.org/data/2.5/weather?"
         f"q={city},{country}&appid={api_key}&units=metric&lang=pt_br"
     )
     data = http_get_json(url)
@@ -314,7 +314,7 @@ class PiClockApp(tk.Tk):
         now = datetime.now()
         snooze_time = now + timedelta(minutes=5)
         self.store.add(snooze_time.hour, snooze_time.minute, [snooze_time.weekday()])
-        messagebox.showinfo("Soneca", f"Alarme adiado para {snooze_time.strftime('%H:%M')}")
+        messagebox.showinfo("Adiar Alarme", f"Alarme adiado para {snooze_time.strftime('%H:%M')}")
         self.stop_alarm()
 
 # ====== TELAS ======
@@ -363,7 +363,7 @@ class MainScreen(ttk.Frame):
                                    command=self._toggle_test)
         self.stop_alarm_btn = ttk.Button(actions, text="Parar alarme", style="Action.TButton",
                                          command=self.controller.stop_alarm, state="disabled")
-        self.snooze_btn = ttk.Button(actions, text="Soneca (5 min)", style="Action.TButton",
+        self.snooze_btn = ttk.Button(actions, text="Adiar Alarme (5 min)", style="Action.TButton",
                                      command=self.controller.snooze_alarm, state="disabled")
 
         self.new_alarm_btn.grid(row=0, column=0, padx=6)
