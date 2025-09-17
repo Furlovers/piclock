@@ -4,6 +4,7 @@
 PiClock Touch – Relógio com alarme e clima melhorado
 """
 
+import requests
 import os
 import json
 import uuid
@@ -88,26 +89,63 @@ def weather_icon_from_owm(main: str, descr: str) -> str:
         return "🌫️"
     return "🌡️"
 
+import requests
+
 def fetch_weather(city: str, country: str, api_key: str):
     if not api_key:
-        return {"temp": "—", "descr": "Sem API Key", "icon": "🌡️", "temp_min": "—", "temp_max": "—"}
+        return {
+            "temp": "—",
+            "descr": "Sem API Key",
+            "icon": "🌡️",
+            "temp_min": "—",
+            "temp_max": "—"
+        }
 
-    url = (
-        f"https://api.openweathermap.org/data/2.5/weather?"
-        f"q={city},{country}&appid={api_key}&units=metric&lang=pt_br"
-    )
-    data = http_get_json(url)
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "q": f"{city},{country}",
+        "appid": api_key,
+        "units": "metric",
+        "lang": "pt_br"
+    }
 
-    if not data or "main" not in data or "weather" not in data:
-        return {"temp": "—", "descr": "Erro ao obter clima", "icon": "🌡️", "temp_min": "—", "temp_max": "—"}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
 
-    temp = round(data["main"]["temp"])
-    temp_min = round(data["main"]["temp_min"])
-    temp_max = round(data["main"]["temp_max"])
-    descr = data["weather"][0]["description"]
-    icon = weather_icon_from_owm(data["weather"][0]["main"], descr)
+        if response.status_code != 200 or "main" not in data or "weather" not in data:
+            return {
+                "temp": "—",
+                "descr": "Erro ao obter clima",
+                "icon": "🌡️",
+                "temp_min": "—",
+                "temp_max": "—"
+            }
 
-    return {"temp": temp, "descr": descr, "icon": icon, "temp_min": temp_min, "temp_max": temp_max}
+        temp = round(data["main"]["temp"])
+        temp_min = round(data["main"]["temp_min"])
+        temp_max = round(data["main"]["temp_max"])
+        descr = data["weather"][0]["description"]
+        icon = weather_icon_from_owm(data["weather"][0]["main"], descr)
+
+        return {
+            "temp": temp,
+            "descr": descr,
+            "icon": icon,
+            "temp_min": temp_min,
+            "temp_max": temp_max
+        }
+
+    except Exception as e:
+        print(f"[EXCEÇÃO] Erro ao obter clima: {e}")
+        return {
+            "temp": "—",
+            "descr": "Falha de conexão",
+            "icon": "🌡️",
+            "temp_min": "—",
+            "temp_max": "—"
+        }
+
 
 # ====== MODELO ======
 class Alarm:
@@ -422,18 +460,26 @@ class MainScreen(ttk.Frame):
 
     def update_weather(self):
         w = self.controller.weather
+    
         if not w:
             self.weather_icon_lbl.configure(text="🌡️")
             self.weather_temp_lbl.configure(text="—°C")
-            self.weather_descr_lbl.configure(text="")
-            self.weather_extra_lbl.configure(text="")
+            self.weather_descr_lbl.configure(text="Sem dados")
+            self.weather_extra_lbl.configure(text="Mín: —°C / Máx: —°C")
         else:
-            self.weather_icon_lbl.configure(text=w["icon"])
-            self.weather_temp_lbl.configure(text=f"{w['temp']}°C")
-            self.weather_descr_lbl.configure(text=w["descr"].capitalize())
+            temp = w.get("temp", "—")
+            temp_min = w.get("temp_min", "—")
+            temp_max = w.get("temp_max", "—")
+            descr = w.get("descr", "—")
+            icon = w.get("icon", "🌡️")
+    
+            self.weather_icon_lbl.configure(text=icon)
+            self.weather_temp_lbl.configure(text=f"{temp}°C")
+            self.weather_descr_lbl.configure(text=descr.capitalize())
             self.weather_extra_lbl.configure(
-                text=f"Mín: {w['temp_min']}°C / Máx: {w['temp_max']}°C"
+                text=f"Mín: {temp_min}°C / Máx: {temp_max}°C"
             )
+
 
 # ====== Nova tela: criação de alarmes ======
 class NewAlarmScreen(ttk.Frame):
