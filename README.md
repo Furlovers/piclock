@@ -25,10 +25,6 @@ O **Pi Clock** exibe a **hora em tempo real**, a **data atual**, o **dia da sema
 - Criar, editar e excluir **alarmes programados**  
 - Emissão de alerta sonoro por **buzzer** ao disparar o alarme  
 - Interface gráfica intuitiva com **suporte a touchscreen**  
-- (Opcional) Ativar/desativar alarmes individualmente  
-- (Opcional) Personalização do formato da hora (12h/24h)  
-- (Opcional) Seleção de diferentes padrões de alerta no buzzer  
-- (Opcional) Interface com tema claro/escuro  
 
 ---
 
