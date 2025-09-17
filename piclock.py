@@ -12,8 +12,10 @@ import time
 from datetime import datetime, date, timedelta
 import tkinter as tk
 from tkinter import ttk, messagebox
+from dotenv import load_dotenv
 
 # ====== CONFIGURAÇÕES ======
+load_dotenv()
 FULLSCREEN = False
 ALARM_FILE = "alarms.json"
 REFRESH_CLOCK_MS = 1000
