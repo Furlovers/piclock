@@ -37,6 +37,9 @@ PT_MONTHS = [
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
 ]
 
+UBIDOTS_TOKEN = os.environ.get("UBIDOTS_TOKEN", "")
+UBIDOTS_DEVICE = "piclock"  # nome que aparecerá no Ubidots
+
 # ====== ÁUDIO ======
 try:
     from audio import AudioPlayer
@@ -68,6 +71,32 @@ def http_get_json(url: str):
             return _json.loads(data)
     except Exception:
         return None
+    
+# ====== UBIDOTS ======
+def ubidots_send(variable: str, value):
+    """Envia dados para o Ubidots"""
+    if not UBIDOTS_TOKEN:
+        print("[ERRO] Token do Ubidots não encontrado.")
+        return False
+
+    url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}/{variable}/values"
+    headers = {
+        "X-Auth-Token": UBIDOTS_TOKEN,
+        "Content-Type": "application/json"
+    }
+    payload = {"value": value}
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        if resp.status_code < 400:
+            print(f"[OK] Ubidots: {variable} = {value}")
+            return True
+        else:
+            print(f"[ERRO] Ubidots ({resp.status_code}): {resp.text}")
+            return False
+    except Exception as e:
+        print(f"[EXCEÇÃO] Ubidots: {e}")
+        return False
 
 # ====== CLIMA ======
 def weather_icon_from_owm(main: str, descr: str) -> str:
@@ -341,6 +370,12 @@ class PiClockApp(tk.Tk):
             main.set_alarm_state(True)
             main.update_test_btn()
 
+        # >>> Envia para Ubidots aqui
+        from datetime import datetime
+        now = datetime.now()
+        ubidots_send("alarmes_tocados", 1)
+        ubidots_send("alarme_hora", now.hour)
+
     def stop_alarm(self):
         if self.audio.is_playing():
             self.audio.stop()
@@ -479,8 +514,11 @@ class MainScreen(ttk.Frame):
             self.weather_extra_lbl.configure(
                 text=f"Mín: {temp_min}°C / Máx: {temp_max}°C"
             )
-
-
+        # >>> Envia para Ubidots aqui
+        ubidots_send("temperature", w["temp"])
+        ubidots_send("temp_min", w["temp_min"])
+        ubidots_send("temp_max", w["temp_max"])
+        
 # ====== Nova tela: criação de alarmes ======
 class NewAlarmScreen(ttk.Frame):
     def __init__(self, parent, controller: PiClockApp):
