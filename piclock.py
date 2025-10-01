@@ -73,30 +73,33 @@ def http_get_json(url: str):
         return None
     
 # ====== UBIDOTS ======
-# ====== UBIDOTS ======
 def ubidots_send_batch(data: dict):
-    """Envia várias variáveis de uma vez para o Ubidots"""
+    """Envia várias variáveis de uma vez para o Ubidots (Industrial API)"""
     if not UBIDOTS_TOKEN:
         print("[ERRO] Token do Ubidots não encontrado.")
         return False
 
-    url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}"
-    headers = {
-        "X-Auth-Token": UBIDOTS_TOKEN,
-        "Content-Type": "application/json"
-    }
+    success = True
+    for variable, info in data.items():
+        value = info.get("value")
+        payload = {"value": value}
+        url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}/{variable}/values"
+        headers = {
+            "X-Auth-Token": UBIDOTS_TOKEN,
+            "Content-Type": "application/json"
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            if resp.status_code < 400:
+                print(f"[OK] Ubidots: {variable} = {value}")
+            else:
+                print(f"[ERRO] Ubidots ({resp.status_code}): {resp.text}")
+                success = False
+        except Exception as e:
+            print(f"[EXCEÇÃO] Ubidots: {e}")
+            success = False
+    return success
 
-    try:
-        resp = requests.post(url, headers=headers, json=data, timeout=10)
-        if resp.status_code < 400:
-            print(f"[OK] Ubidots batch: {list(data.keys())}")
-            return True
-        else:
-            print(f"[ERRO] Ubidots ({resp.status_code}): {resp.text}")
-            return False
-    except Exception as e:
-        print(f"[EXCEÇÃO] Ubidots: {e}")
-        return False
 
 # ====== CLIMA ======
 def weather_icon_from_owm(main: str, descr: str) -> str:
@@ -397,7 +400,7 @@ class PiClockApp(tk.Tk):
         self.store.add(snooze_time.hour, snooze_time.minute, [snooze_time.weekday()])
         messagebox.showinfo("Adiar Alarme", f"Alarme adiado para {snooze_time.strftime('%H:%M')}")
         self.stop_alarm()
-    
+
         payload = {
             "alarme_soneca": {"value": 1, "context": {"nova_hora": snooze_time.strftime("%H:%M")}},
             "date_year": {"value": snooze_time.year},
