@@ -73,23 +73,23 @@ def http_get_json(url: str):
         return None
     
 # ====== UBIDOTS ======
-def ubidots_send(variable: str, value):
-    """Envia dados para o Ubidots"""
+# ====== UBIDOTS ======
+def ubidots_send_batch(data: dict):
+    """Envia várias variáveis de uma vez para o Ubidots"""
     if not UBIDOTS_TOKEN:
         print("[ERRO] Token do Ubidots não encontrado.")
         return False
 
-    url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}/{variable}/values"
+    url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}"
     headers = {
         "X-Auth-Token": UBIDOTS_TOKEN,
         "Content-Type": "application/json"
     }
-    payload = {"value": value}
 
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp = requests.post(url, headers=headers, json=data, timeout=10)
         if resp.status_code < 400:
-            print(f"[OK] Ubidots: {variable} = {value}")
+            print(f"[OK] Ubidots batch: {list(data.keys())}")
             return True
         else:
             print(f"[ERRO] Ubidots ({resp.status_code}): {resp.text}")
@@ -117,8 +117,6 @@ def weather_icon_from_owm(main: str, descr: str) -> str:
     if "mist" in m or "fog" in m or "nebl" in d:
         return "🌫️"
     return "🌡️"
-
-import requests
 
 def fetch_weather(city: str, country: str, api_key: str):
     if not api_key:
@@ -365,32 +363,51 @@ class PiClockApp(tk.Tk):
     def start_alarm(self):
         if not self.audio.is_playing():
             self.audio.play()
-        main: MainScreen = self.frames.get("MainScreen")  # type: ignore
+        main: MainScreen = self.frames.get("MainScreen")
         if main:
             main.set_alarm_state(True)
             main.update_test_btn()
 
-        # >>> Envia para Ubidots aqui
-        from datetime import datetime
         now = datetime.now()
-        ubidots_send("alarmes_tocados", 1)
-        ubidots_send("alarme_hora", now.hour)
+        payload = {
+            "alarme_event": {"value": 1},
+            "alarmes_tocados_total": {"value": 1, "context": {"hora": now.strftime("%H:%M")}},
+            "alarme_hora": {"value": now.hour},
+            "alarme_minuto": {"value": now.minute},
+            "date_year": {"value": now.year},
+            "date_month": {"value": now.month},
+            "date_day": {"value": now.day},
+            "timestamp": {"value": int(time.time())},
+        }
+        ubidots_send_batch(payload)
 
     def stop_alarm(self):
         if self.audio.is_playing():
             self.audio.stop()
-        main: MainScreen = self.frames.get("MainScreen")  # type: ignore
+        main: MainScreen = self.frames.get("MainScreen")
         if main:
             main.set_alarm_state(False)
             main.update_test_btn()
 
+        ubidots_send_batch({"alarme_event": {"value": 0}})
+
     def snooze_alarm(self):
-        """Adia o alarme em 5 minutos."""
         now = datetime.now()
         snooze_time = now + timedelta(minutes=5)
         self.store.add(snooze_time.hour, snooze_time.minute, [snooze_time.weekday()])
         messagebox.showinfo("Adiar Alarme", f"Alarme adiado para {snooze_time.strftime('%H:%M')}")
         self.stop_alarm()
+    
+        payload = {
+            "alarme_soneca": {"value": 1, "context": {"nova_hora": snooze_time.strftime("%H:%M")}},
+            "date_year": {"value": snooze_time.year},
+            "date_month": {"value": snooze_time.month},
+            "date_day": {"value": snooze_time.day},
+            "date_hour": {"value": snooze_time.hour},
+            "date_minute": {"value": snooze_time.minute},
+            "timestamp": {"value": int(time.time())},
+        }
+        ubidots_send_batch(payload)
 
 # ====== TELAS ======
 class MainScreen(ttk.Frame):
@@ -515,13 +532,24 @@ class MainScreen(ttk.Frame):
                 text=f"Mín: {temp_min}°C / Máx: {temp_max}°C"
             )
     
-            # >>> Envia para Ubidots apenas se os dados existem
-            if isinstance(temp, (int, float)):
-                ubidots_send("temperature", temp)
-            if isinstance(temp_min, (int, float)):
-                ubidots_send("temp_min", temp_min)
-            if isinstance(temp_max, (int, float)):
-                ubidots_send("temp_max", temp_max)
+            # >>> Envia pacote completo para o Ubidots
+            now = datetime.now()
+            payload = {
+                "temperature": {"value": temp},
+                "temp_min": {"value": temp_min},
+                "temp_max": {"value": temp_max},
+                "humidity": {"value": w.get("humidity", 0)},
+                "pressure": {"value": w.get("pressure", 0)},
+                "weather_descr": {"value": 0, "context": {"descr": descr}},
+                "weather_code": {"value": hash(descr) % 100},  # código simplificado
+                "date_year": {"value": now.year},
+                "date_month": {"value": now.month},
+                "date_day": {"value": now.day},
+                "date_hour": {"value": now.hour},
+                "date_minute": {"value": now.minute},
+                "timestamp": {"value": int(time.time())},
+            }
+            ubidots_send_batch(payload)
 
 # ====== Nova tela: criação de alarmes ======
 class NewAlarmScreen(ttk.Frame):
