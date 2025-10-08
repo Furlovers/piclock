@@ -430,14 +430,27 @@ class PiClockApp(tk.Tk):
         ubidots_send_batch(payload)
 
     def _tick_remote_commands(self):
-        """Verifica se o Ubidots enviou comando remoto de disparar alarme."""
+        """Verifica no Ubidots se deve tocar ou parar o alarme."""
         value = ubidots_get_last_value("remote_alarm_trigger")
-        if value == 1:
-            print("[UBIDOTS] Comando remoto recebido: tocar alarme")
+    
+        if value is None:
+            # Nenhum valor obtido — apenas agenda próxima checagem
+            self.after(5000, self._tick_remote_commands)
+            return
+    
+        # Se valor == 1 → garantir que o alarme esteja tocando
+        if value == 1 and not self.audio.is_playing():
+            print("[UBIDOTS] Comando remoto: TOCAR alarme")
             self.start_alarm()
-            # Reseta a variável para 0 (evita repetir)
-            ubidots_send_batch({"remote_alarm_trigger": {"value": 0}})
+    
+        # Se valor == 0 → garantir que o alarme pare
+        elif value == 0 and self.audio.is_playing():
+            print("[UBIDOTS] Comando remoto: PARAR alarme")
+            self.stop_alarm()
+    
+        # Continua checando a cada 5 segundos
         self.after(5000, self._tick_remote_commands)
+
 
 # ====== TELAS ======
 class MainScreen(ttk.Frame):
