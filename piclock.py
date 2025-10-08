@@ -112,6 +112,10 @@ def ubidots_get_last_value(variable: str):
             data = resp.json()
             if data.get("results"):
                 return data["results"][0]["value"]
+            else:
+                print("[UBIDOTS] Nenhum valor encontrado para", variable)
+        else:
+            print(f"[UBIDOTS] Erro {resp.status_code}: {resp.text}")
     except Exception as e:
         print(f"[EXCEÇÃO] Ubidots GET: {e}")
     return None
@@ -432,22 +436,22 @@ class PiClockApp(tk.Tk):
     def _tick_remote_commands(self):
         """Verifica no Ubidots se deve tocar ou parar o alarme."""
         value = ubidots_get_last_value("remote_alarm_trigger")
-    
+
         if value is None:
             # Nenhum valor obtido — apenas agenda próxima checagem
             self.after(5000, self._tick_remote_commands)
             return
-    
+
         # Se valor == 1 → garantir que o alarme esteja tocando
         if value == 1 and not self.audio.is_playing():
             print("[UBIDOTS] Comando remoto: TOCAR alarme")
             self.start_alarm()
-    
+
         # Se valor == 0 → garantir que o alarme pare
         elif value == 0 and self.audio.is_playing():
             print("[UBIDOTS] Comando remoto: PARAR alarme")
             self.stop_alarm()
-    
+
         # Continua checando a cada 5 segundos
         self.after(5000, self._tick_remote_commands)
 
