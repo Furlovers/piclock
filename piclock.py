@@ -403,7 +403,7 @@ class PiClockApp(tk.Tk):
             "date_day": {"value": now.day},
             "timestamp": {"value": int(time.time())},
         }
-        ubidots_send_batch(payload)
+        threading.Thread(target=ubidots_send_batch, args=(payload,), daemon=True).start()
 
     def stop_alarm(self):
         if self.audio.is_playing():
@@ -413,7 +413,9 @@ class PiClockApp(tk.Tk):
             main.set_alarm_state(False)
             main.update_test_btn()
 
-        ubidots_send_batch({"alarme_event": {"value": 0}})
+        threading.Thread(
+    target=ubidots_send_batch, args=({"alarme_event": {"value": 0}},), daemon=True
+).start()
 
     def snooze_alarm(self):
         now = datetime.now()
@@ -431,7 +433,7 @@ class PiClockApp(tk.Tk):
             "date_minute": {"value": snooze_time.minute},
             "timestamp": {"value": int(time.time())},
         }
-        ubidots_send_batch(payload)
+        threading.Thread(target=ubidots_send_batch, args=(payload,), daemon=True).start()
 
     def _tick_remote_commands(self):
         """Verifica no Ubidots se deve tocar ou parar o alarme."""
@@ -596,7 +598,7 @@ class MainScreen(ttk.Frame):
                 "date_minute": {"value": now.minute},
                 "timestamp": {"value": int(time.time())},
             }
-            ubidots_send_batch(payload)
+            threading.Thread(target=ubidots_send_batch, args=(payload,), daemon=True).start()
 
 # ====== Nova tela: criação de alarmes ======
 class NewAlarmScreen(ttk.Frame):
