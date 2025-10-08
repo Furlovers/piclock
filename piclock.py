@@ -335,7 +335,7 @@ class PiClockApp(tk.Tk):
         self.after(REFRESH_CLOCK_MS, self._tick_clock)
         self.after(CHECK_ALARMS_MS, self._tick_alarms)
         self.after(100, self._tick_weather)
-        self.after(5000, self._tick_remote_commands)
+        self.after(1000, self._tick_remote_commands)
 
     def _build_fonts(self, scale: float):
         import tkinter.font as tkfont
@@ -439,7 +439,7 @@ class PiClockApp(tk.Tk):
 
         if value is None:
             # Nenhum valor obtido — apenas agenda próxima checagem
-            self.after(5000, self._tick_remote_commands)
+            self.after(1000, self._tick_remote_commands)
             return
 
         # Se valor == 1 → garantir que o alarme esteja tocando
