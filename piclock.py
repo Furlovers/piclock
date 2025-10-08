@@ -100,6 +100,22 @@ def ubidots_send_batch(data: dict):
             success = False
     return success
 
+def ubidots_get_last_value(variable: str):
+    """Obtém o último valor de uma variável do Ubidots."""
+    if not UBIDOTS_TOKEN:
+        return None
+    url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE}/{variable}/values"
+    headers = {"X-Auth-Token": UBIDOTS_TOKEN}
+    try:
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("results"):
+                return data["results"][0]["value"]
+    except Exception as e:
+        print(f"[EXCEÇÃO] Ubidots GET: {e}")
+    return None
+
 
 # ====== CLIMA ======
 def weather_icon_from_owm(main: str, descr: str) -> str:
@@ -315,6 +331,7 @@ class PiClockApp(tk.Tk):
         self.after(REFRESH_CLOCK_MS, self._tick_clock)
         self.after(CHECK_ALARMS_MS, self._tick_alarms)
         self.after(100, self._tick_weather)
+        self.after(5000, self._tick_remote_commands)
 
     def _build_fonts(self, scale: float):
         import tkinter.font as tkfont
@@ -411,6 +428,16 @@ class PiClockApp(tk.Tk):
             "timestamp": {"value": int(time.time())},
         }
         ubidots_send_batch(payload)
+
+    def _tick_remote_commands(self):
+        """Verifica se o Ubidots enviou comando remoto de disparar alarme."""
+        value = ubidots_get_last_value("remote_alarm_trigger")
+        if value == 1:
+            print("[UBIDOTS] Comando remoto recebido: tocar alarme")
+            self.start_alarm()
+            # Reseta a variável para 0 (evita repetir)
+            ubidots_send_batch({"remote_alarm_trigger": {"value": 0}})
+        self.after(5000, self._tick_remote_commands)
 
 # ====== TELAS ======
 class MainScreen(ttk.Frame):
