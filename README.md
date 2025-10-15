@@ -148,6 +148,7 @@ PiClock/
 ├── audio.py                # Gerenciamento de reprodução de som
 ├── .env                    # Token do Ubidots e chave da API do clima
 └── README.md               # Documentação do projeto
+```
 
 ## 🚀 Possibilidades Futuras
 
