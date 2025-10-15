@@ -124,6 +124,7 @@ Isso permite **controle remoto completo** do Pi Clock diretamente pela web.
                        │
                        ▼
               ⏰ Alarmes Locais
+```
 
 ## 🧩 Tecnologias Utilizadas
 
